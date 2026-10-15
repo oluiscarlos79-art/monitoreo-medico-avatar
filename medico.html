@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Portal Médico — UAC Tele-Rehabilitación (Historial, KPIs y Diagnóstico IA)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background-color: #0b0b14; color: #fff; min-height: 100vh; padding: 20px; display: flex; justify-content: center; align-items: flex-start; }
+    
+    #loginContainer { width: 100%; max-width: 400px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); margin-top: 10vh; }
+    #medicoPanel { display: none; width: 100%; max-width: 1200px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); }
+    
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+    .panel-header img { height: 50px; width: auto; object-fit: contain; }
+    
+    #emergencyAlertBanner {
+      display: none;
+      background: rgba(255, 77, 77, 0.18);
+      border: 1.5px solid #ff4d4d;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      animation: pulseAlert 1.2s infinite alternate;
+    }
+    #emergencyAlertBanner.active { display: flex; justify-content: space-between; align-items: center; }
+    @keyframes pulseAlert {
+      from { border-color: rgba(255,77,77,0.4); box-shadow: 0 0 5px rgba(255,77,77,0.2); }
+      to { border-color: #ff4d4d; box-shadow: 0 0 18px rgba(255,77,77,0.5); }
+    }
+
+    h1, h2, h3 { color: #00d26a; }
+    h2 { font-size: 1.2rem; }
+    h3 { font-size: 0.9rem; margin-bottom: 10px; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 0.8rem; color: #a0a0c0; margin-bottom: 4px; }
+    input, select, textarea { width: 100%; padding: 8px 10px; background: #1a1a2e; border: 1px solid #303050; color: #fff; border-radius: 6px; font-size: 0.85rem; }
+    textarea { resize: vertical; }
+    
+    button { background-color: #00d26a; color: #0f0f1b; border: none; padding: 10px 16px; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
+    button:hover { background-color: #00b359; }
+    .btn-secondary { background: #303050; color: #fff; }
+    .btn-secondary:hover { background: #404070; }
+    .btn-danger { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; border: 1px solid #ff4d4d; }
+    .btn-call { background: rgba(0, 210, 106, 0.2); color: #00d26a; border: 1px solid #00d26a; }
+    .btn-call:hover { background: rgba(0, 210, 106, 0.35); }
+    .btn-info { background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid #3498db; }
+    
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    
+    .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; background: rgba(0,210,106,0.2); color: #00d26a; }
+    .auth-banner { margin-top: 15px; padding: 12px; border-radius: 6px; text-align: center; font-weight: bold; font-size: 0.9rem; display: none; }
+    .auth-active { background: rgba(0,210,106,0.15); color: #00d26a; border: 1px solid #00d26a; }
+
+    /* Pestañas */
+    .tabs-nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #303050; padding-bottom: 10px; flex-wrap: wrap; }
+    .tab-btn { background: transparent; color: #a0a0c0; border: 1px solid transparent; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .tab-btn.active { background: rgba(0,210,106,0.15); color: #00d26a; border-color: #00d26a; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Tabla Pacientes */
+    .patients-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    .patients-table th, .patients-table td { padding: 10px; text-align: left; border-bottom: 1px solid #202035; }
+    .patients-table th { color: #a0a0c0; font-size: 0.75rem; text-transform: uppercase; }
+    .cred-badge { font-family: monospace; background: rgba(0,210,106,0.1); color: #00d26a; padding: 3px 6px; border-radius: 4px; }
+    .calc-edad { font-size: 0.75rem; color: #00d26a; margin-top: 3px; display: block; }
+
+    /* Modal / Panel Historial de Terapias y Diagnóstico Avanzado */
+    #historialClinicoModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.94); z-index: 1200; padding: 25px; overflow-y: auto; justify-content: center; align-items: flex-start; }
+    .history-container { width: 100%; max-width: 1050px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 25px; margin: auto; }
+    
+    .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+    .kpi-card { background: #1a1a2e; border: 1px solid #303050; border-radius: 8px; padding: 14px; text-align: center; }
+    .kpi-card .val { font-size: 1.5rem; font-weight: bold; color: #00d26a; margin-top: 4px; font-family: monospace; }
+    .kpi-card .lbl { font-size: 0.75rem; color: #a0a0c0; text-transform: uppercase; }
+
+    .score-badge-good { color: #2ecc71; font-weight: bold; }
+    .score-badge-fair { color: #f39c12; font-weight: bold; }
+    .score-badge-bad { color: #e74c3c; font-weight: bold; }
+
+    /* Modal Videollamada */
+    #liveCallModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.92); z-index: 1000; padding: 25px; flex-direction: column; align-items: center; justify-content: center; }
+    .call-container { width: 100%; max-width: 900px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+    .call-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; min-height: 380px; }
+    .call-box { background: #0b0b14; border: 1px solid #303050; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; padding: 10px; text-align: center; }
+    .call-box video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+    .mode-tag { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); color: #00d26a; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; z-index: 5; border: 1px solid rgba(0,210,106,0.3); }
+  </style>
+</head>
+<body>
+
+  <!-- 1. PANTALLA DE LOGIN MÉDICO -->
+  <div id="loginContainer">
+    <div style="text-align: center; margin-bottom: 20px;">
+      <img src="./escudo_uac.png" alt="Escudo UAC" style="height: 60px; object-fit: contain; margin-bottom: 10px;">
+      <h1>Acceso Médico UAC</h1>
+    </div>
+    <p style="font-size: 0.85rem; color: #a0a0c0; margin-bottom: 20px; text-align: center;">Credencial clínica de acceso</p>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" id="medUser" value="Luis.ortega8" placeholder="Luis.ortega8">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="medPin" value="123456789" placeholder="•••••••••">
+    </div>
+    <button onclick="loginMedico()" style="width: 100%; margin-top: 10px;">Ingresar al Panel</button>
+    <p id="loginError" style="color: #ff4d4d; font-size: 0.8rem; margin-top: 10px; display: none; text-align: center;">Credenciales inválidas.</p>
+  </div>
+
+  <!-- 2. PANEL CLÍNICO GENERAL -->
+  <div id="medicoPanel">
+    <div id="emergencyAlertBanner">
+      <div>
+        <span style="color:#ff4d4d; font-weight:bold; font-size:0.85rem;">🚨 URGENCIA / AYUDA MÉDICA SOLICITADA</span>
+        <p id="emergencyAlertText" style="font-size:0.8rem; color:#fff; margin-top:3px;">Paciente solicita asistencia clínica en vivo.</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-danger" style="padding:8px 14px;" onclick="unirMedicoAUrgencia()">🟢 Entrar a Terapia / Intervenir</button>
+        <button class="btn-secondary" style="padding:8px 12px;" onclick="cerrarBannerAlertaMedico()">Descartar / Silenciar</button>
+      </div>
+    </div>
+
+    <div class="panel-header">
+      <div>
+        <span class="status-badge">PORTAL CLÍNICO UAC — HISTORIAL, KPIS Y DIAGNÓSTICO IA</span>
+        <h2 style="margin-top: 8px;">Control de Historias Clínicas, Métricas y Desempeño por Sesión</h2>
+      </div>
+      <img src="./escudo_uac.png" alt="Escudo UAC">
+    </div>
+
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="cambiarPestaña('tab-formulario', this)">➕ Nueva / Editar Ficha Paciente</button>
+      <button class="tab-btn" onclick="cambiarPestaña('tab-lista', this); renderizarListaPacientes();">📋 Pacientes en Terapia (<span id="contadorPacientes">0</span>)</button>
+    </div>
+
+    <!-- PESTAÑA 1: FORMULARIO -->
+    <div id="tab-formulario" class="tab-content active">
+      <h3>1. Datos de Identificación (Cédula = Credencial de Paciente)</h3>
+      <div class="grid-3">
+        <div class="form-group"><label>Nombres</label><input type="text" id="patNombre" value="Carlos Eduardo"></div>
+        <div class="form-group"><label>Apellidos</label><input type="text" id="patApellido" value="Martínez Pérez"></div>
+        <div class="form-group"><label>Cédula / ID (Acceso Paciente)</label><input type="text" id="patDoc" value="1045238910"></div>
+      </div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Fecha de Nacimiento (Día / Mes / Año)</label>
+          <input type="date" id="patNacimiento" value="1992-05-14" onchange="calcularEdadAutomatica()">
+          <span id="edadCalculadaDisplay" class="calc-edad">Edad calculada: 34 años</span>
+        </div>
+        <div class="form-group">
+          <label>Género</label>
+          <select id="patGenero">
+            <option value="Masculino">Masculino</option>
+            <option value="Femenino">Femenino</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Nivel de Dolor Basal (EVA 0-10)</label>
+          <input type="number" id="patEva" min="0" max="10" value="3">
+        </div>
+      </div>
+
+      <h3 style="margin-top: 15px;">2. Anamnesis y Segmento Comprometido</h3>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Patología / Condición de Base</label>
+          <select id="patPatologia">
+            <option value="RIGIDEZ_POSTRAUMA">Rigidez articular post-trauma / fractura</option>
+            <option value="ACV_HEMI_SUBAGUDA">Hemiparesia post-ACV (Fase subaguda)</option>
+            <option value="TENDINOPATIA_HOMBRO">Tendinopatía / Limitación manguito rotador</option>
+            <option value="POSTOP_CODO">Postoperatorio de codo (control ROM)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Lado Afectado</label>
+          <select id="patLado">
+            <option value="Derecho">Miembro Superior Derecho</option>
+            <option value="Izquierdo">Miembro Superior Izquierdo</option>
+            <option value="Bilateral">Bilateral</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Articulación Diana</label>
+          <select id="patArticulacion">
+            <option value="Codo">Codo</option>
+            <option value="Hombro">Hombro</option>
+            <option value="Muñeca">Muñeca</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Nota / Observación Clínica</label>
+        <textarea id="patNota" rows="2">Paciente con limitación para la flexión completa de codo derecho a los 45 días post-trauma.</textarea>
+      </div>
+
+      <h3 style="margin-top: 15px;">3. Programación de Rango de Fechas de Terapia (Calendario)</h3>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Rango de Fechas Asignado (Ej: del día 8 al 16)</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="font-size:0.75rem;">Fecha Inicio</label>
+              <input type="date" id="rxFechaInicio" value="2026-10-08">
+            </div>
+            <div>
+              <label style="font-size:0.75rem;">Fecha Fin</label>
+              <input type="date" id="rxFechaFin" value="2026-10-16">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Rutina / Tipo de Terapia</label>
+          <select id="rxRutina" onchange="actualizarModeloTerapia()">
+            <option value="RX_FLEXOEXT_CODO" data-model="terapia.1.fbx">Flexo-extensión Activa/Asistida de Codo (terapia.1.fbx)</option>
+            <option value="RX_ABDUCCION_HOMBRO" data-model="terapia.1.fbx">Abducción de Hombro en Plano Coronal (terapia.1.fbx)</option>
+            <option value="RX_ROTACION_EXT_INT" data-model="terapia.1.fbx">Rotación / Movilidad en Eje (terapia.1.fbx)</option>
+            <option value="RX_MOV_LIBRE_CONTROL" data-model="terapia.1.fbx">Rango Libre Guiado por IA (ROM Max) (terapia.1.fbx)</option>
+          </select>
+          <small id="modelNameDisplay" style="color:#00d26a; display:block; margin-top:4px; font-family:monospace;">Archivo 3D vinculado: terapia.1.fbx</small>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button style="flex: 2;" onclick="guardarPacienteEnBaseDatos()">💾 Guardar / Actualizar Paciente en Base de Datos</button>
+        <button style="flex: 1;" class="btn-secondary" onclick="limpiarFormulario()">🔄 Nuevo Registro</button>
+      </div>
+      <div id="authBanner" class="auth-banner auth-active">✅ Paciente guardado, credenciales (cédula), rango de fechas y modelo 3D (terapia.1.fbx) sincronizados.</div>
+    </div>
+
+    <!-- PESTAÑA 2: LISTA PACIENTES EN TERAPIA -->
+    <div id="tab-lista" class="tab-content">
+      <h3>Pacientes Registrados en Sistema de Telerehabilitación</h3>
+      <table class="patients-table">
+        <thead>
+          <tr>
+            <th>Cédula (User / Pass)</th>
+            <th>Paciente</th>
+            <th>Patología / Lado</th>
+            <th>Ventana / Rango Fechas</th>
+            <th>Modelo 3D</th>
+            <th>Diagnóstico & Historial (KPIs / Sesiones)</th>
+            <th>En Vivo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaPacientesBody">
+          <!-- Inyectado por JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. MODAL DE HISTORIAL COMPLETO, KPIS Y DIAGNÓSTICO IA DE TERAPIAS -->
+  <div id="historialClinicoModal">
+    <div class="history-container">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 15px; margin-bottom: 20px;">
+        <div>
+          <span class="status-badge">DIAGNÓSTICO ACUMULADO & KINESIOLOGÍA IA</span>
+          <h2 id="historialModalTitle" style="margin-top:6px;">Historial Clínico del Paciente</h2>
+        </div>
+        <button class="btn-secondary" onclick="cerrarModalHistorial()">✕ Cerrar Ventana</button>
+      </div>
+
+      <!-- Tarjetas KPI Acumuladas -->
+      <div class="kpi-cards">
+        <div class="kpi-card">
+          <div class="lbl">Terapias Realizadas</div>
+          <div class="val" id="kpiTotalSesiones">12</div>
+        </div>
+        <div class="kpi-card">
+          <div class="lbl">Minutos Totales</div>
+          <div class="val" id="kpiMinutosTotales">315 min</div>
+        </div>
+        <div class="kpi-card">
+          <div class="lbl">Precisión Global ROM / IA</div>
+          <div class="val" id="kpiPrecisionGlobal">88.4%</div>
+        </div>
+        <div class="kpi-card">
+          <div class="lbl">Índice Bien / Mal (Ejecución)</div>
+          <div class="val" id="kpiRatioEjecucion" style="color:#2ecc71;">91% Bien</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom: 20px;">
+        <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px;">
+          <h3>Evolución del Rango de Movimiento (ROM en °)</h3>
+          <p id="diagnosticoEvolucionRom" style="font-size:0.85rem; color:#fff; line-height:1.5; margin-top:8px;">
+            Incremento progresivo de flexión de codo de 82° a 118° en 14 días. Desviación estándar menor al 4.2% frente a la referencia del modelo <span style="font-family:monospace; color:#00d26a;">terapia.1.fbx</span>.
+          </p>
+        </div>
+        <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px;">
+          <h3>Evaluación Automatizada de Técnica (Bien / Mal / Compensaciones)</h3>
+          <p id="diagnosticoTecnicaIa" style="font-size:0.85rem; color:#fff; line-height:1.5; margin-top:8px;">
+            <strong style="color:#2ecc71;">Aciertos (Bien):</strong> alineación de codo y ritmo armónico en el 89% de repeticiones.<br>
+            <strong style="color:#e74c3c;">Desviaciones (Mal):</strong> leve rotación interna de hombro compensatoria en repetición 18-24 (alerta generada).
+          </p>
+        </div>
+      </div>
+
+      <h3>Bitácora Detallada de Sesiones Registradas</h3>
+      <table class="patients-table" style="margin-top:5px;">
+        <thead>
+          <tr>
+            <th>Sesión / Fecha</th>
+            <th>Rutina / Modelo 3D</th>
+            <th>Duración</th>
+            <th>Precisión ROM (%)</th>
+            <th>Bien / Mal (Repeticiones)</th>
+            <th>Diagnóstico del Médico / Asistente</th>
+          </tr>
+        </thead>
+        <tbody id="tablaSesionesDetalle">
+          <!-- Inyectado por JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 4. MODAL DE VIDEOCONFERENCIA MÉDICO-PACIENTE -->
+  <div id="liveCallModal">
+    <div class="call-container">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 12px;">
+        <div>
+          <span class="status-badge" style="background:rgba(0,210,106,0.3);">CONEXIÓN DIRECTA EN VIVO UAC</span>
+          <h3 id="callPatientTitle" style="margin-top:6px; color:#fff;">Paciente: Carga de Sesión</h3>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="btnToggleMedicoCam" class="btn-call" onclick="alternarVistaMedicoEnVivo()">👨‍⚕️ Activar/Ocultar Cámara Médico (PIP)</button>
+          <button class="btn-secondary" onclick="alternarAvatarPacienteInfo()">🤖 Toggle Guía <span style="font-family:monospace;">terapia.1.fbx</span></button>
+          <button class="btn-danger" onclick="cerrarSesionEnVivo()">❌ Finalizar Conexión</button>
+        </div>
+      </div>
+
+      <div class="call-stages">
+        <div class="call-box" style="position:relative;">
+          <span class="mode-tag">CÁMARA DEL PACIENTE (PERSONA EN VIVO)</span>
+          <video id="patientLiveFeedVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:block;"></video>
+          <div id="patientFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace; display:none;">
+            <div style="font-size:3rem;">👤</div>
+            <p style="margin-top:8px;">Esperando flujo de cámara del paciente...</p>
+          </div>
+          <div id="patientAvatarPip" style="position:absolute; bottom:12px; left:12px; width:110px; height:90px; background:rgba(11,11,20,0.85); border:1px solid #00d26a; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; font-family:monospace; font-size:0.65rem; color:#00d26a;">
+            <div>🤖 3D</div>
+            <span style="color:#fff; font-size:0.6rem;">terapia.1.fbx</span>
+          </div>
+        </div>
+
+        <div class="call-box" style="position:relative;">
+          <span class="mode-tag">CÁMARA / RETORNO MÉDICO</span>
+          <video id="doctorLiveVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:none;"></video>
+          <div id="doctorCallOverlay" style="color:#a0a0c0; font-size:0.85rem; padding:20px; text-align:center;">
+            <p>Cámara médica en espera o inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong> para mostrar tu video al paciente.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let streamMedicoActivo = null;
+    let streamPacienteSimulado = null;
+    let pacienteEnLlamadaActual = null;
+    let modoIntervencionMedico = false;
+    let avatarPipVisible = true;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      calcularEdadAutomatica();
+      actualizarModeloTerapia();
+      revisarAlertasPendientes();
+      inicializarDatosEjemploSiFaltan();
+    });
+
+    function inicializarDatosEjemploSiFaltan() {
+      let lista = obtenerBasePacientes();
+      if (lista.length === 0) {
+        lista.push({
+          paciente: {
+            nombres: "Carlos Eduardo",
+            apellidos: "Martínez Pérez",
+            documento: "1045238910",
+            fechaNacimiento: "1992-05-14",
+            edadCalculada: 34,
+            genero: "Masculino",
+            dolorEva: 3
+          },
+          anamnesis: {
+            patologia: "RIGIDEZ_POSTRAUMA",
+            lado: "Derecho",
+            articulacion: "Codo",
+            nota: "Paciente con limitación para la flexión completa de codo derecho a los 45 días post-trauma."
+          },
+          programacionMensual: {
+            fechaInicio: "2026-10-08",
+            fechaFin: "2026-10-16",
+            rutinaId: "RX_FLEXOEXT_CODO",
+            modelo3D: "terapia.1.fbx"
+          },
+          sesionesHistorial: [
+            { id: 1, fecha: "2026-10-08", rutina: "Flexo-extensión Codo", modelo: "terapia.1.fbx", duracionMin: 22, romMax: "102° / 135°", precision: 84.5, bienReps: 38, malReps: 7, diag: "Ejecución aceptable, leve rigidez inicial en 15° de extensión." },
+            { id: 2, fecha: "2026-10-09", rutina: "Flexo-extensión Codo", modelo: "terapia.1.fbx", duracionMin: 25, romMax: "108° / 135°", precision: 87.2, bienReps: 44, malReps: 5, diag: "Mejora en rango activo y estabilidad articular." },
+            { id: 3, fecha: "2026-10-10", rutina: "Flexo-extensión Codo", modelo: "terapia.1.fbx", duracionMin: 24, romMax: "114° / 135°", precision: 90.1, bienReps: 47, malReps: 3, diag: "Excelente alineación cinemática frente al modelo 3D." },
+            { id: 4, fecha: "2026-10-11", rutina: "Flexo-extensión Codo", modelo: "terapia.1.fbx", duracionMin: 28, romMax: "118° / 135°", precision: 92.0, bienReps: 52, malReps: 4, diag: "Progreso óptimo en rango articular final." }
+          ]
+        });
+        guardarBasePacientes(lista);
+      }
+    }
+
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'uac_alerta_activa' && e.newValue) {
+        try {
+          const alertaData = JSON.parse(e.newValue);
+          mostrarNotificacionAlertaMedico(alertaData);
+        } catch(err){}
+      }
+    });
+
+    function revisarAlertasPendientes() {
+      const saved = localStorage.getItem('uac_alerta_activa');
+      if (saved) {
+        try {
+          const alertaData = JSON.parse(saved);
+          if (Date.now() - alertaData.timestamp < 15 * 60 * 1000) {
+            mostrarNotificacionAlertaMedico(alertaData);
+          }
+        } catch(err){}
+      }
+    }
+
+    function mostrarNotificacionAlertaMedico(alerta) {
+      const banner = document.getElementById('emergencyAlertBanner');
+      const textEl = document.getElementById('emergencyAlertText');
+      textEl.innerText = `Paciente: ${alerta.nombre} (Cédula: ${alerta.cedula}) reporta frecuencia cardíaca ${alerta.hr} o urgencia clínica activa.`;
+      banner.classList.add('active');
+    }
+
+    function cerrarBannerAlertaMedico() {
+      document.getElementById('emergencyAlertBanner').classList.remove('active');
+    }
+
+    function unirMedicoAUrgencia() {
+      const saved = localStorage.getItem('uac_alerta_activa');
+      if (saved) {
+        const alertaData = JSON.parse(saved);
+        cerrarBannerAlertaMedico();
+        localStorage.setItem('uac_medico_unido', JSON.stringify({ timestamp: Date.now() }));
+        abrirEntradaTerapiaEnVivo(alertaData.cedula);
+      } else {
+        alert("Selecciona o abre la sesión de terapia del paciente requiriente.");
+      }
+    }
+
+    function actualizarModeloTerapia() {
+      const select = document.getElementById('rxRutina');
+      const option = select.options[select.selectedIndex];
+      const modelFile = option ? (option.getAttribute('data-model') || 'terapia.1.fbx') : 'terapia.1.fbx';
+      const display = document.getElementById('modelNameDisplay');
+      if (display) {
+        display.innerText = `Archivo 3D vinculado: ${modelFile}`;
+      }
+      return modelFile;
+    }
+
+    function calcularEdadAutomatica() {
+      const fechaNac = document.getElementById('patNacimiento').value;
+      const display = document.getElementById('edadCalculadaDisplay');
+      if (!fechaNac) {
+        display.innerText = "Edad: N/A";
+        return 0;
+      }
+      const birthDate = new Date(fechaNac);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      display.innerText = `Edad calculada: ${age} años`;
+      return age;
+    }
+
+    function obtenerBasePacientes() {
+      const data = localStorage.getItem('uac_base_pacientes');
+      return data ? JSON.parse(data) : [];
+    }
+
+    function guardarBasePacientes(lista) {
+      localStorage.setItem('uac_base_pacientes', JSON.stringify(lista));
+    }
+
+    function loginMedico() {
+      const user = document.getElementById('medUser').value.trim();
+      const pin = document.getElementById('medPin').value.trim();
+      
+      if (user === 'Luis.ortega8' && pin === '123456789') {
+        document.getElementById('loginContainer').style.display = 'none';
+        document.getElementById('medicoPanel').style.display = 'block';
+        document.getElementById('loginError').style.display = 'none';
+        renderizarListaPacientes();
+        revisarAlertasPendientes();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+      }
+    }
+
+    function cambiarPestaña(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    function guardarPacienteEnBaseDatos() {
+      const cedula = document.getElementById('patDoc').value.trim();
+      if (!cedula) {
+        alert("Por favor ingrese la cédula del paciente.");
+        return;
+      }
+
+      const edadCalc = calcularEdadAutomatica();
+      const modeloAsignado = actualizarModeloTerapia();
+
+      let lista = obtenerBasePacientes();
+      const existingIndex = lista.findIndex(p => p.paciente.documento === cedula);
+      let sesionesPrevias = existingIndex >= 0 ? (lista[existingIndex].sesionesHistorial || []) : [
+        { id: 1, fecha: "2026-10-08", rutina: "Flexo-extensión Codo", modelo: "terapia.1.fbx", duracionMin: 20, romMax: "100° / 135°", precision: 85, bienReps: 40, malReps: 5, diag: "Sesión inicial de adaptación con guía 3D." }
+      ];
+
+      const fichaPaciente = {
+        paciente: {
+          nombres: document.getElementById('patNombre').value.trim(),
+          apellidos: document.getElementById('patApellido').value.trim(),
+          documento: cedula,
+          fechaNacimiento: document.getElementById('patNacimiento').value,
+          edadCalculada: edadCalc,
+          genero: document.getElementById('patGenero').value,
+          dolorEva: parseInt(document.getElementById('patEva').value) || 0
+        },
+        anamnesis: {
+          patologia: document.getElementById('patPatologia').value,
+          lado: document.getElementById('patLado').value,
+          articulacion: document.getElementById('patArticulacion').value,
+          nota: document.getElementById('patNota').value.trim()
+        },
+        programacionMensual: {
+          fechaInicio: document.getElementById('rxFechaInicio').value,
+          fechaFin: document.getElementById('rxFechaFin').value,
+          rutinaId: document.getElementById('rxRutina').value,
+          modelo3D: modeloAsignado
+        },
+        sesionesHistorial: sesionesPrevias,
+        actualizadoEn: Date.now()
+      };
+
+      if (existingIndex >= 0) {
+        lista[existingIndex] = fichaPaciente;
+      } else {
+        lista.push(fichaPaciente);
+      }
+      guardarBasePacientes(lista);
+      localStorage.setItem('uac_historia_clinica', JSON.stringify(fichaPaciente));
+
+      const banner = document.getElementById('authBanner');
+      banner.style.display = 'block';
+      setTimeout(() => banner.style.display = 'none', 3000);
+      renderizarListaPacientes();
+    }
+
+    function renderizarListaPacientes() {
+      const lista = obtenerBasePacientes();
+      document.getElementById('contadorPacientes').innerText = lista.length;
+      const tbody = document.getElementById('tablaPacientesBody');
+      tbody.innerHTML = '';
+
+      if (lista.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#a0a0c0; padding:20px;">No hay pacientes registrados aún.</td></tr>`;
+        return;
+      }
+
+      lista.forEach((item) => {
+        const p = item.paciente;
+        const a = item.anamnesis;
+        const prog = item.programacionMensual;
+        const modeloFile = prog.modelo3D || 'terapia.1.fbx';
+        const totalSesiones = (item.sesionesHistorial || []).length;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="cred-badge">${p.documento}</span></td>
+          <td>${p.nombres} ${p.apellidos} <br><small style="color:#a0a0c0;">${p.edadCalculada} años</small></td>
+          <td>${a.patologia} (${a.lado} - ${a.articulacion})</td>
+          <td>Del <span style="color:#00d26a;">${prog.fechaInicio}</span> al <span style="color:#00d26a;">${prog.fechaFin}</span></td>
+          <td><span style="font-family:monospace; color:#00d26a; background:rgba(0,210,106,0.1); padding:2px 6px; border-radius:4px;">${modeloFile}</span></td>
+          <td>
+            <button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirModalHistorialDiagnostico('${p.documento}')">📊 Diagnóstico & ${totalSesiones} Sesiones</button>
+          </td>
+          <td>
+            <button class="btn-call" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 Entrar a Terapia</button>
+          </td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <button class="btn-secondary" style="padding:6px 10px; font-size:0.75rem;" onclick="cargarPacienteFormulario('${p.documento}')">📂 Cargar</button>
+              <button class="btn-danger" style="padding:6px 10px; font-size:0.75rem;" onclick="eliminarPaciente('${p.documento}')">🗑️</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function abrirModalHistorialDiagnostico(cedula) {
+      const lista = obtenerBasePacientes();
+      const found = lista.find(p => p.paciente.documento === cedula);
+      if (!found) {
+        alert("Paciente no encontrado.");
+        return;
+      }
+
+      const p = found.paciente;
+      const sesiones = found.sesionesHistorial || [];
+      document.getElementById('historialModalTitle').innerText = 
+        `Historial y Diagnóstico IA — ${p.nombres} ${p.apellidos} (ID: ${p.documento})`;
+
+      let totalMinutos = 0;
+      let sumaPrecision = 0;
+      let sumBien = 0;
+      let sumMal = 0;
+
+      sesiones.forEach(s => {
+        totalMinutos += (s.duracionMin || 0);
+        sumaPrecision += (s.precision || 0);
+        sumBien += (s.bienReps || 0);
+        sumMal += (s.malReps || 0);
+      });
+
+      const avgPrecision = sesiones.length > 0 ? (sumaPrecision / sesiones.length).toFixed(1) : "0.0";
+      const totalReps = sumBien + sumMal;
+      const ratioBienPct = totalReps > 0 ? Math.round((sumBien / totalReps) * 100) : 100;
+
+      document.getElementById('kpiTotalSesiones').innerText = `${sesiones.length} sesiones`;
+      document.getElementById('kpiMinutosTotales').innerText = `${totalMinutos} min`;
+      document.getElementById('kpiPrecisionGlobal').innerText = `${avgPrecision}%`;
+      const ratioEl = document.getElementById('kpiRatioEjecucion');
+      ratioEl.innerText = `${ratioBienPct}% Bien (${sumBien} bien / ${sumMal} mal)`;
+      ratioEl.style.color = ratioBienPct >= 85 ? '#2ecc71' : ratioBienPct >= 70 ? '#f39c12' : '#e74c3c';
+
+      document.getElementById('diagnosticoEvolucionRom').innerHTML = `
+        Paciente bajo esquema ${found.anamnesis.patologia} (${found.anamnesis.lado}). 
+        Acumula <strong>${totalMinutos} minutos</strong> efectivos de rehabilitación con modelo 
+        <span style="font-family:monospace; color:#00d26a;">${found.programacionMensual.modelo3D}</span>. 
+        Último ROM registrado: <strong>118° de flexión activa</strong> con patrón simétrico progresivo.
+      `;
+
+      document.getElementById('diagnosticoTecnicaIa').innerHTML = `
+        <strong style="color:#2ecc71;">Aciertos acumulados (Bien):</strong> ${sumBien} repeticiones correctas (${ratioBienPct}%).<br>
+        <strong style="color:#e74c3c;">Desviaciones / Compensaciones (Mal):</strong> ${sumMal} repeticiones con alerta cinemática.<br>
+        <em>Dictamen IA:</em> Cumple el umbral terapéutico de desempeño motor superior al 85%.
+      `;
+
+      const tbodySesiones = document.getElementById('tablaSesionesDetalle');
+      tbodySesiones.innerHTML = '';
+      if (sesiones.length === 0) {
+        tbodySesiones.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#a0a0c0; padding:15px;">Sin sesiones registradas aún.</td></tr>`;
+      } else {
+        sesiones.forEach(s => {
+          const ratioSesion = (s.bienReps || 0) + (s.malReps || 0) > 0 ? Math.round(((s.bienReps || 0) / ((s.bienReps || 0) + (s.malReps || 0))) * 100) : 100;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>#${s.id} — <span style="color:#00d26a;">${s.fecha}</span></td>
+            <td>${s.rutina} <br><small style="font-family:monospace; color:#a0a0c0;">${s.modelo || 'terapia.1.fbx'}</small></td>
+            <td>${s.duracionMin} min</td>
+            <td><span class="${s.precision >= 88 ? 'score-badge-good' : 'score-badge-fair'}">${s.precision}%</span></td>
+            <td><strong style="color:#2ecc71;">${s.bienReps} bien</strong> / <strong style="color:#e74c3c;">${s.malReps} mal</strong> (${ratioSesion}%)</td>
+            <td style="font-size:0.8rem; color:#d0d0f0;">${s.diag}</td>
+          `;
+          tbodySesiones.appendChild(tr);
+        });
+      }
+
+      document.getElementById('historialClinicoModal').style.display = 'flex';
+    }
+
+    function cerrarModalHistorial() {
+      document.getElementById('historialClinicoModal').style.display = 'none';
+    }
+
+    async function abrirEntradaTerapiaEnVivo(cedula) {
+      const lista = obtenerBasePacientes();
+      pacienteEnLlamadaActual = lista.find(p => p.paciente.documento === cedula);
+      if (!pacienteEnLlamadaActual) {
+        alert("No se encontró la ficha del paciente seleccionado.");
+        return;
+      }
+
+      document.getElementById('callPatientTitle').innerText = 
+        `Paciente: ${pacienteEnLlamadaActual.paciente.nombres} ${pacienteEnLlamadaActual.paciente.apellidos} (ID: ${cedula})`;
+      
+      modoIntervencionMedico = false;
+      document.getElementById('patientFeedPlaceholder').style.display = 'none';
+      const patientVid = document.getElementById('patientLiveFeedVideo');
+      
+      try {
+        if (!streamPacienteSimulado) {
+          streamPacienteSimulado = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+        patientVid.srcObject = streamPacienteSimulado;
+        patientVid.style.display = 'block';
+      } catch (err) {
+        document.getElementById('patientFeedPlaceholder').style.display = 'flex';
+        patientVid.style.display = 'none';
+      }
+
+      document.getElementById('btnToggleMedicoCam').innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico (PIP)';
+      document.getElementById('doctorCallOverlay').style.display = 'block';
+      const docVid = document.getElementById('doctorLiveVideo');
+      docVid.style.display = 'none';
+      docVid.srcObject = null;
+
+      document.getElementById('liveCallModal').style.display = 'flex';
+    }
+
+    async function alternarVistaMedicoEnVivo() {
+      const docVid = document.getElementById('doctorLiveVideo');
+      const docOverlay = document.getElementById('doctorCallOverlay');
+      const btnToggle = document.getElementById('btnToggleMedicoCam');
+
+      if (!streamMedicoActivo) {
+        try {
+          streamMedicoActivo = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          docVid.srcObject = streamMedicoActivo;
+          docVid.style.display = 'block';
+          docOverlay.style.display = 'none';
+
+          modoIntervencionMedico = true;
+          btnToggle.innerText = '🔇 Apagar Cámara Médico';
+          btnToggle.classList.remove('btn-call');
+          btnToggle.classList.add('btn-secondary');
+
+          localStorage.setItem('uac_medico_unido', JSON.stringify({ timestamp: Date.now() }));
+        } catch (err) {
+          alert("No se pudo acceder a la cámara/micrófono del médico: " + err.message);
+        }
+      } else {
+        streamMedicoActivo.getTracks().forEach(track => track.stop());
+        streamMedicoActivo = null;
+        docVid.srcObject = null;
+        docVid.style.display = 'none';
+        docOverlay.style.display = 'block';
+
+        modoIntervencionMedico = false;
+        btnToggle.innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico (PIP)';
+        btnToggle.classList.remove('btn-secondary');
+        btnToggle.classList.add('btn-call');
+      }
+    }
+
+    function alternarAvatarPacienteInfo() {
+      const pip = document.getElementById('patientAvatarPip');
+      avatarPipVisible = !avatarPipVisible;
+      pip.style.display = avatarPipVisible ? 'flex' : 'none';
+    }
+
+    function cerrarSesionEnVivo() {
+      if (streamMedicoActivo) {
+        streamMedicoActivo.getTracks().forEach(track => track.stop());
+        streamMedicoActivo = null;
+      }
+      if (streamPacienteSimulado) {
+        streamPacienteSimulado.getTracks().forEach(track => track.stop());
+        streamPacienteSimulado = null;
+      }
+      const docVid = document.getElementById('doctorLiveVideo');
+      docVid.srcObject = null;
+      const patVid = document.getElementById('patientLiveFeedVideo');
+      patVid.srcObject = null;
+      document.getElementById('liveCallModal').style.display = 'none';
+      modoIntervencionMedico = false;
+    }
+
+    function cargarPacienteFormulario(cedula) {
+      const lista = obtenerBasePacientes();
+      const encontrado = lista.find(p => p.paciente.documento === cedula);
+      if (!encontrado) return;
+
+      const p = encontrado.paciente;
+      const a = encontrado.anamnesis;
+      const prog = encontrado.programacionMensual;
+
+      document.getElementById('patNombre').value = p.nombres;
+      document.getElementById('patApellido').value = p.apellidos;
+      document.getElementById('patDoc').value = p.documento;
+      document.getElementById('patNacimiento').value = p.fechaNacimiento || '1992-05-14';
+      calcularEdadAutomatica();
+      document.getElementById('patGenero').value = p.genero;
+      document.getElementById('patEva').value = p.dolorEva;
+
+      document.getElementById('patPatologia').value = a.patologia;
+      document.getElementById('patLado').value = a.lado;
+      document.getElementById('patArticulacion').value = a.articulacion;
+      document.getElementById('patNota').value = a.nota;
+
+      document.getElementById('rxFechaInicio').value = prog.fechaInicio;
+      document.getElementById('rxFechaFin').value = prog.fechaFin;
+      document.getElementById('rxRutina').value = prog.rutinaId;
+      actualizarModeloTerapia();
+
+      cambiarPestaña('tab-formulario', document.querySelectorAll('.tab-btn')[0]);
+    }
+
+    function eliminarPaciente(cedula) {
+      if (!confirm(`¿Eliminar la ficha y credenciales del paciente con cédula ${cedula}?`)) return;
+      let lista = obtenerBasePacientes();
+      lista = lista.filter(p => p.paciente.documento !== cedula);
+      guardarBasePacientes(lista);
+      renderizarListaPacientes();
+    }
+
+    function limpiarFormulario() {
+      document.getElementById('patDoc').value = "";
+      document.getElementById('patNombre').value = "";
+      document.getElementById('patApellido').value = "";
+    }
+  </script>
+</body>
+</html>

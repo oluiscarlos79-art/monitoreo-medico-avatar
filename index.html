@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal y Visor 3D — UAC Tele-Rehabilitación</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.3/umd/index.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1a1a2e;
+      color: #ffffff;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* VISTA 1: LOGIN POR CÉDULA */
+    #patientLoginSection {
+      display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px;
+    }
+    #patientLogin { width: 100%; max-width: 420px; background: #141422; padding: 35px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); }
+
+    /* VISTA 2: APLICACIÓN DUAL-PANEL (50% IZQ / 50% DER) */
+    #patientAppContainer { width: 100vw; height: 100vh; overflow: hidden; display: flex; position: relative; }
+    
+    .left-panel {
+      width: 50%;
+      height: 100vh;
+      position: relative;
+      background-color: #141422;
+      border-right: 2px solid rgba(0, 210, 106, 0.3);
+      display: flex;
+      flex-direction: column;
+    }
+    .avatar-container {
+      width: 100%;
+      flex: 1;
+      position: relative;
+    }
+    #avatarCanvas { width: 100%; height: 100%; display: block; }
+    
+    .right-panel {
+      width: 50%;
+      height: 100vh;
+      position: relative;
+      background-color: #0f0f1b;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    /* Cámara expandida (75vh) eliminando todo espacio sobrante */
+    .right-panel video {
+      width: 100%;
+      height: 75vh;
+      object-fit: cover;
+      transform: scaleX(-1);
+      border-bottom: 2px solid rgba(0,210,106,0.3);
+      flex-shrink: 0;
+    }
+    .right-content {
+      padding: 8px 12px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .telemetry-panel {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(15, 15, 27, 0.88);
+      padding: 8px 12px;
+      border-radius: 8px;
+      z-index: 10;
+      backdrop-filter: blur(5px);
+      min-width: 200px;
+      border: 1px solid rgba(0, 210, 106, 0.2);
+    }
+    .telemetry-title { font-size: 0.75rem; font-weight: bold; margin-bottom: 4px; color: #00d26a; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px; }
+    .telemetry-item { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.75rem; }
+    .telemetry-label { color: #a0a0c0; }
+    .telemetry-value { font-weight: bold; color: #ffffff; }
+
+    .precision-panel {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      background: rgba(15, 15, 27, 0.88);
+      padding: 8px 14px;
+      border-radius: 8px;
+      border-left: 4px solid #00d26a;
+      z-index: 10;
+      backdrop-filter: blur(5px);
+      max-width: 280px;
+    }
+    .precision-title { font-size: 0.7rem; color: #a0a0c0; text-transform: uppercase; }
+    .precision-value { font-size: 1.4rem; font-weight: bold; color: #00d26a; }
+    .feedback-text { font-size: 0.72rem; color: #e0e0e0; margin-top: 2px; }
+
+    .btn-manual-start {
+      background-color: #00d26a; color: #0f0f1b; border: none; padding: 5px 10px;
+      font-size: 0.72rem; font-weight: bold; border-radius: 5px; cursor: pointer; margin-top: 5px;
+    }
+    .btn-manual-start:hover { background-color: #00b359; }
+
+    /* Escudo UAC ampliado para legibilidad superior */
+    .uac-logo-container {
+      position: absolute;
+      top: 12px;
+      right: 15px;
+      z-index: 20;
+      background: rgba(15, 15, 27, 0.88);
+      padding: 6px 12px;
+      border-radius: 10px;
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      border: 1px solid rgba(0, 210, 106, 0.4);
+    }
+    .uac-logo-container img { height: 46px; width: auto; object-fit: contain; }
+
+    .card { background: #141422; padding: 6px 10px; border-radius: 6px; border: 1px solid #303050; }
+    .card h3 { font-size: 0.72rem; color: #00d26a; text-transform: uppercase; margin-bottom: 3px; }
+    .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 0.7rem; }
+    .info-label { color: #a0a0c0; font-size: 0.6rem; text-transform: uppercase; }
+    .info-value { font-weight: bold; color: #fff; }
+
+    /* Secuencia de días secuencial (Bloqueo 24h automático) */
+    .days-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 4px; max-height: 65px; overflow-y: auto; padding-right: 2px; }
+    .day-card { background: #1a1a2e; border: 1px solid #303050; padding: 4px; border-radius: 5px; text-align: center; cursor: not-allowed; opacity: 0.5; transition: 0.2s; }
+    .day-card.unlocked { opacity: 1; cursor: pointer; }
+    .day-card.unlocked:hover { border-color: #00d26a; background: rgba(0,210,106,0.05); }
+    .day-card.active { border-color: #00d26a; background: rgba(0,210,106,0.18); opacity: 1; }
+    .day-num { font-weight: bold; color: #00d26a; font-size: 0.68rem; }
+    .day-date { font-size: 0.58rem; color: #a0a0c0; margin-top: 1px; }
+
+    .ai-speech-bubble {
+      background: rgba(15, 15, 27, 0.9);
+      border: 1px solid #00d26a;
+      padding: 5px 8px;
+      border-radius: 8px;
+    }
+    .ai-speech-header { font-size: 0.62rem; color: #00d26a; font-weight: bold; margin-bottom: 1px; text-transform: uppercase; }
+    .ai-speech-text { font-size: 0.73rem; color: #ffffff; line-height: 1.18; }
+
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.78rem; color: #a0a0c0; margin-bottom: 4px; }
+    input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #303050; color: #fff; border-radius: 6px; font-size: 0.9rem; }
+    button.main-btn { background-color: #00d26a; color: #0f0f1b; border: none; padding: 10px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; }
+    .error-msg { color: #ff4d4d; font-size: 0.78rem; margin-top: 8px; display: none; text-align: center; }
+
+    #loadingOverlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(20, 20, 34, 0.92); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50;
+    }
+    .spinner { width: 35px; height: 35px; border: 3px solid rgba(0,210,106,0.2); border-top: 3px solid #00d26a; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 8px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* --- PANEL DE EMERGENCIA / MÉDICO EN VIVO (Flotante o sobrepuesto sin quitar el Avatar 3D) --- */
+    #doctorEmergencyPanel {
+      display: none;
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 320px;
+      max-height: 420px;
+      background: #0f0f1b;
+      z-index: 35;
+      flex-direction: column;
+      border: 1px solid #ff4d4d;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    #doctorEmergencyPanel.active { display: flex; }
+    .doctor-video-header { background: rgba(255, 77, 77, 0.25); color: #ff4d4d; border-bottom: 1px solid #ff4d4d; font-size: 0.72rem; padding: 8px 10px; font-family: monospace; font-weight: bold; display: flex; flex-direction: column; gap: 3px; }
+    #doctorRemoteVideo { width: 100%; height: 180px; object-fit: cover; background: #000; transform: scaleX(-1); }
+  </style>
+</head>
+<body>
+
+  <!-- 1. LOGIN DEL PACIENTE (Cédula) -->
+  <div id="patientLoginSection">
+    <div id="patientLogin">
+      <div style="text-align: center; margin-bottom: 18px;">
+        <img src="./escudo_uac.png" alt="Escudo UAC" style="height: 75px; object-fit: contain; margin-bottom: 10px;">
+        <h1 style="font-size: 1.5rem;">Acceso Paciente UAC</h1>
+      </div>
+      <p style="font-size: 0.82rem; color: #a0a0c0; margin-bottom: 18px; text-align: center; line-height: 1.4;">Bienvenido a tu espacio de recuperación UAC. Digita tu documento para iniciar.</p>
+      <div class="form-group">
+        <label>Número de Cédula</label>
+        <input type="text" id="patLoginCedula" placeholder="Ej: 1045238910" value="1045238910">
+      </div>
+      <button class="main-btn" onclick="loginPaciente()">Ingresar a mi Terapia</button>
+      <p id="loginError" class="error-msg">Cédula no encontrada en el sistema clínico.</p>
+    </div>
+  </div>
+
+  <!-- 2. APLICACIÓN DUAL-PANEL (Avatar 3D 50% + Cámara 75vh superior + Info compacta) -->
+  <div id="patientAppContainer" style="display: none;">
+    <!-- PANEL IZQUIERDO: 50% AVATAR 3D + PANEL FLOTANTE DE MÉDICO EN VIVO (SIN QUITAR EL AVATAR) -->
+    <div class="left-panel">
+      <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <p style="font-size: 0.8rem; color: #00d26a;">Cargando entorno 3D (terapia.1.fbx)...</p>
+      </div>
+
+      <div class="telemetry-panel">
+        <div class="telemetry-title">Telemetría Activa</div>
+        <div class="telemetry-item"><span class="telemetry-label">Paciente:</span><span class="telemetry-value" id="telemetryName">-</span></div>
+        <div class="telemetry-item"><span class="telemetry-label">Frec. Cardíaca:</span><span class="telemetry-value" id="valHR">78 BPM</span></div>
+        <div class="telemetry-item"><span class="telemetry-label">SpO2 / Temp:</span><span class="telemetry-value" id="valTemp">98% / 36.5°C</span></div>
+        <div class="telemetry-item"><span class="telemetry-label">Ángulo Articular:</span><span class="telemetry-value" id="valAngle">0°</span></div>
+      </div>
+
+      <div class="avatar-container">
+        <canvas id="avatarCanvas"></canvas>
+        
+        <!-- Panel del Médico flotante/superpuesto (El Avatar 3D sigue corriendo/visible de fondo) -->
+        <div id="doctorEmergencyPanel">
+          <div class="doctor-video-header">
+            <span>🚨 INTERVENCIÓN MÉDICA UAC</span>
+            <span style="color:#fff;" id="doctorStatusLabel">Conectando con especialista...</span>
+            <span style="font-size: 0.65rem; color: #ffd700;" id="doctorTimerLabel">Límite: 10:00</span>
+          </div>
+          <video id="doctorRemoteVideo" autoplay playsinline></video>
+        </div>
+      </div>
+
+      <div class="precision-panel">
+        <div class="precision-title">Contador Autónomo IA (Luis)</div>
+        <div class="precision-value" id="repCounter">0/10</div>
+        <div class="feedback-text" id="feedbackMessage">El tiempo máximo de espera es de 10 minutos. Di "Comenzar"</div>
+        <button class="btn-manual-start" onclick="forzarInicioTerapia()">▶ ¡Forzar Inicio Terapia!</button>
+      </div>
+    </div>
+
+    <!-- PANEL DERECHO: WEBCAM AMPLIADA (75vh) + ESCUDO UAC + INFORMACIÓN COMPACTA + BOTONES DE ACCIÓN -->
+    <div class="right-panel">
+      <div class="uac-logo-container"><img src="./escudo_uac.png" alt="Escudo UAC"></div>
+      <video id="webcam" autoplay playsinline muted></video>
+
+      <div class="right-content">
+        <div class="card">
+          <h3>Ficha del Paciente</h3>
+          <div class="info-grid">
+            <div><div class="info-label">Nombre</div><div class="info-value" id="dispNombre">-</div></div>
+            <div><div class="info-label">Cédula</div><div class="info-value" id="dispCedula">-</div></div>
+            <div><div class="info-label">Edad</div><div class="info-value" id="dispEdad">-</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Secuencia Diaria (Desbloqueo c/24h)</h3>
+          <div style="font-size: 0.65rem; color: #a0a0c0; margin-bottom: 3px;">
+            Del <strong id="dispInicio" style="color:#00d26a;">-</strong> al <strong id="dispFin" style="color:#00d26a;">-</strong>
+          </div>
+          <div class="days-list" id="daysSequenceContainer">
+            <!-- Rellenado dinámicamente con regla 24h -->
+          </div>
+        </div>
+
+        <div class="ai-speech-bubble">
+          <div class="ai-speech-header">Asistente IA - Luis (UAC)</div>
+          <div class="ai-speech-text" id="speechText">Inicia sesión. El tiempo máximo de espera es de 10 minutos. Di "Comenzar".</div>
+        </div>
+
+        <!-- Botones al pie: Solicitar Ayuda (SOS) + Salir -->
+        <div style="display: flex; gap: 8px; margin-top: auto;">
+          <button style="background:rgba(255, 77, 77, 0.2); color:#ff4d4d; border:1px solid #ff4d4d; padding:6px; font-size:0.72rem; font-weight:bold; border-radius:5px; cursor:pointer; flex:1;" onclick="simularAlertaClinica()">🚨 Ayuda Médica (SOS)</button>
+          <button style="background:transparent; color:#ff6b6b; border:1px solid #ff6b6b; padding:6px; font-size:0.72rem; border-radius:5px; cursor:pointer; flex:1;" onclick="cerrarSesionPaciente()">🚪 Salir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let recognition;
+    let aiState = "ESPERANDO";
+    let currentRep = 0;
+    let targetReps = 10;
+    let targetMaxAngle = 90;
+    let scene, camera, renderer, controls;
+    let clock = new THREE.Clock();
+    let fbxMixer = null;
+    let fbxModel = null;
+    let diaActivoSeleccionado = null;
+    let maxUnlockedDay = 1;
+    let doctorTimerInterval = null;
+    let doctorSecondsRemaining = 600; // 10 minutos (10 * 60 segundos)
+
+    function loginPaciente() {
+      const cedulaInput = document.getElementById('patLoginCedula').value.trim();
+      const baseRaw = localStorage.getItem('uac_base_pacientes');
+      const basePacientes = baseRaw ? JSON.parse(baseRaw) : [];
+
+      let encontrado = basePacientes.find(p => p.paciente.documento === cedulaInput);
+      if (!encontrado) {
+        const fallback = localStorage.getItem('uac_historia_clinica');
+        if (fallback) {
+          const fbObj = JSON.parse(fallback);
+          if (fbObj.paciente && fbObj.paciente.documento === cedulaInput) {
+            encontrado = fbObj;
+          }
+        }
+      }
+
+      if (!encontrado) {
+        document.getElementById('loginError').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('loginError').style.display = 'none';
+      cargarDashboardPaciente(encontrado);
+    }
+
+    function cargarDashboardPaciente(data) {
+      document.getElementById('patientLoginSection').style.display = 'none';
+      document.getElementById('patientAppContainer').style.display = 'flex';
+
+      const p = data.paciente;
+      const prog = data.programacionMensual;
+
+      document.getElementById('telemetryName').innerText = `${p.nombres} ${p.apellidos}`;
+      document.getElementById('dispNombre').innerText = `${p.nombres} ${p.apellidos}`;
+      document.getElementById('dispCedula').innerText = p.documento;
+      document.getElementById('dispEdad').innerText = `${p.edadCalculada || 0} años`;
+
+      document.getElementById('dispInicio').innerText = prog.fechaInicio;
+      document.getElementById('dispFin').innerText = prog.fechaFin;
+
+      const dStart = new Date(prog.fechaInicio + 'T00:00:00');
+      const dEnd = new Date(prog.fechaFin + 'T00:00:00');
+      const diffTime = Math.abs(dEnd - dStart);
+      const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      const savedMaxDay = localStorage.getItem(`uac_max_day_${p.documento}`);
+      maxUnlockedDay = savedMaxDay ? parseInt(savedMaxDay, 10) : 1;
+
+      renderizarSecuenciaDias(totalDays, dStart);
+      seleccionarDiaSecuencia(1, prog.fechaInicio, null);
+      
+      initCamera();
+      init3DAvatar();
+      animate();
+
+      let saludo = `Hola ${p.nombres}. Soy Luis, asistente UAC. El tiempo máximo de espera es de 10 minutos. Di "comenzar" para iniciar tu sesión de hoy.`;
+      actualizarDialogo(saludo);
+      hablarIA(saludo, () => {
+        iniciarReconocimientoVoz();
+      });
+    }
+
+    function renderizarSecuenciaDias(totalDays, dStart) {
+      const container = document.getElementById('daysSequenceContainer');
+      container.innerHTML = '';
+      for (let i = 0; i < totalDays; i++) {
+        let currentDayDate = new Date(dStart);
+        currentDayDate.setDate(dStart.getDate() + i);
+        const dateStr = currentDayDate.toISOString().split('T')[0];
+        const dayNumber = i + 1;
+        const isUnlocked = dayNumber <= maxUnlockedDay;
+
+        const card = document.createElement('div');
+        card.className = `day-card ${isUnlocked ? 'unlocked' : ''} ${dayNumber === 1 ? 'active' : ''}`;
+        card.id = `day-card-${dayNumber}`;
+        card.innerHTML = `
+          <div class="day-num">Día ${dayNumber}</div>
+          <div class="day-date">${isUnlocked ? dateStr : '🔒 +24h'}</div>
+        `;
+        if (isUnlocked) {
+          card.onclick = () => seleccionarDiaSecuencia(dayNumber, dateStr, card);
+        }
+        container.appendChild(card);
+      }
+    }
+
+    function seleccionarDiaSecuencia(numDia, fechaStr, elCard) {
+      if (numDia > maxUnlockedDay) return;
+      diaActivoSeleccionado = { numDia, fechaStr };
+      document.querySelectorAll('.day-card').forEach(c => c.classList.remove('active'));
+      const targetCard = document.getElementById(`day-card-${numDia}`);
+      if (targetCard) targetCard.classList.add('active');
+      actualizarDialogo(`Día ${numDia} listo. El tiempo máximo de espera es de 10 minutos. Di "comenzar" cuando estés preparado.`);
+    }
+
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+        document.getElementById('webcam').srcObject = stream;
+      } catch (e) {
+        console.warn("Cámara no disponible:", e);
+      }
+    }
+
+    function hablarIA(texto, callback) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(texto);
+        utterance.lang = 'es-ES';
+        utterance.rate = 1.0;
+        utterance.pitch = 0.9;
+        if (callback) utterance.onend = callback;
+        window.speechSynthesis.speak(utterance);
+      } else if (callback) {
+        callback();
+      }
+    }
+
+    function iniciarReconocimientoVoz() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'es-ES';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onresult = (event) => {
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript.toLowerCase().trim();
+            if (transcript.includes('comenzar') || transcript.includes('empezar') || transcript.includes('iniciar')) {
+              if (aiState === "ESPERANDO") {
+                iniciarTerapia();
+              }
+            }
+          }
+        };
+        recognition.onend = () => { try { if (aiState === "ESPERANDO") recognition.start(); } catch(e){} };
+        try { recognition.start(); } catch(e){}
+      }
+    }
+
+    function forzarInicioTerapia() {
+      if (aiState === "ESPERANDO") {
+        if (recognition) { try { recognition.stop(); } catch(e){} }
+        iniciarTerapia();
+      }
+    }
+
+    function desbloquearSiguienteDia24h(numCompletado) {
+      const cedulaInput = document.getElementById('dispCedula').innerText.trim();
+      const siguienteDia = numCompletado + 1;
+      if (siguienteDia > maxUnlockedDay) {
+        maxUnlockedDay = siguienteDia;
+        localStorage.setItem(`uac_max_day_${cedulaInput}`, maxUnlockedDay.toString());
+      }
+      const targetCard = document.getElementById(`day-card-${siguienteDia}`);
+      if (targetCard) {
+        targetCard.classList.add('unlocked');
+        targetCard.style.cursor = 'pointer';
+        const dStart = new Date(document.getElementById('dispInicio').innerText + 'T00:00:00');
+        dStart.setDate(dStart.getDate() + (siguienteDia - 1));
+        const dateStr = dStart.toISOString().split('T')[0];
+        targetCard.innerHTML = `
+          <div class="day-num">Día ${siguienteDia}</div>
+          <div class="day-date">${dateStr}</div>
+        `;
+        targetCard.onclick = () => seleccionarDiaSecuencia(siguienteDia, dateStr, targetCard);
+      }
+    }
+
+    function iniciarTerapia() {
+      aiState = "TERAPIA";
+      currentRep = 0;
+      let diaActualNum = diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1;
+      let msg = `Comenzamos terapia del Día ${diaActualNum}.`;
+      actualizarDialogo(msg);
+      
+      if (fbxMixer && fbxMixer._actions.length > 0) {
+        fbxMixer._actions.forEach(action => action.play());
+      }
+
+      hablarIA(msg, () => {
+        let loopRep = setInterval(() => {
+          if (aiState !== "TERAPIA") { clearInterval(loopRep); return; }
+          currentRep++;
+          if (currentRep <= targetReps) {
+            document.getElementById('repCounter').innerText = `${currentRep}/${targetReps}`;
+            document.getElementById('feedbackMessage').innerText = `Repetición ${currentRep} / ${targetReps}`;
+            const calcAngle = Math.round((targetMaxAngle / targetReps) * currentRep);
+            document.getElementById('valAngle').innerText = calcAngle + "°";
+            document.getElementById('valHR').innerText = (78 + currentRep * 2) + " BPM";
+            actualizarDialogo(`Repetición ${currentRep}`);
+            hablarIA(currentRep.toString());
+          } else {
+            clearInterval(loopRep);
+            aiState = "REPOSO";
+            if (fbxMixer) fbxMixer.stopAllAction();
+            desbloquearSiguienteDia24h(diaActualNum);
+            let fin = `Excelente trabajo. Día ${diaActualNum} completado. Siguiente día desbloqueado en 24 horas.`;
+            actualizarDialogo(fin);
+            document.getElementById('feedbackMessage').innerText = "¡Sesión finalizada!";
+            hablarIA(fin);
+          }
+        }, 4000);
+      });
+    }
+
+    function actualizarDialogo(texto) {
+      document.getElementById('speechText').innerText = texto;
+    }
+
+    function init3DAvatar() {
+      const canvas = document.getElementById('avatarCanvas');
+      const container = document.querySelector('.left-panel');
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 5000);
+      camera.position.set(0, 100, 380);
+
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+      const light = new THREE.DirectionalLight(0xffffff, 2.0);
+      light.position.set(200, 300, 300);
+      scene.add(light);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 80, 0);
+
+      const fbxLoader = new THREE.FBXLoader();
+      fbxLoader.load('./terapia.1.fbx', (fbx) => {
+        fbxModel = fbx;
+        const box = new THREE.Box3().setFromObject(fbxModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        fbxModel.position.x -= center.x;
+        fbxModel.position.y -= box.min.y;
+        fbxModel.position.z -= center.z;
+
+        const maxDim = Math.max(size.x, size.y, size.z);
+        if (maxDim > 0) {
+          const f = 150 / maxDim;
+          fbxModel.scale.set(f, f, f);
+        }
+
+        scene.add(fbxModel);
+
+        if (fbx.animations && fbx.animations.length > 0) {
+          fbxMixer = new THREE.AnimationMixer(fbxModel);
+          fbx.animations.fields?.forEach ? null : fbx.animations.forEach((clip) => {
+            fbxMixer.clipAction(clip);
+          });
+        }
+        ocultarCarga();
+      }, undefined, (err) => {
+        console.warn("No se cargó terapia.1.fbx, usando render base.", err);
+        ocultarCarga();
+      });
+
+      window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      });
+    }
+
+    function ocultarCarga() {
+      const loaderEl = document.getElementById('loadingOverlay');
+      if (loaderEl) {
+        loaderEl.style.opacity = '0';
+        setTimeout(() => loaderEl.style.display = 'none', 500);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      let delta = clock.getDelta();
+      if (fbxMixer) {
+        fbxMixer.update(delta);
+      }
+      if (controls) controls.update();
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    // --- ALERTA CLÍNICA / SOLICITUD DE AYUDA MÉDICA (CON LÍMITE DE 10 MINUTOS) ---
+    function simularAlertaClinica() {
+      aiState = "ALERTA_MEDICA";
+      
+      document.getElementById('valHR').innerText = "138 BPM ⚠️";
+      document.getElementById('valTemp').innerText = "98% / 38.6°C ⚠️";
+      document.getElementById('feedbackMessage').innerText = "¡ALERTA MÉDICA ACTIVADA!";
+
+      const alertaMsg = "Alerta detectada. Solicitando conexión con el especialista. El tiempo máximo de espera para la atención es de 10 minutos.";
+      actualizarDialogo(alertaMsg);
+      hablarIA(alertaMsg);
+
+      const docPanel = document.getElementById('doctorEmergencyPanel');
+      docPanel.classList.add('active');
+
+      doctorSecondsRemaining = 600;
+      iniciarTemporizadorMedico();
+
+      localStorage.setItem('uac_alerta_activa', JSON.stringify({
+        cedula: document.getElementById('dispCedula').innerText,
+        nombre: document.getElementById('dispNombre').innerText,
+        hr: "138 BPM",
+        timestamp: Date.now()
+      }));
+      localStorage.removeItem('uac_medico_unido');
+    }
+
+    function iniciarTemporizadorMedico() {
+      if (doctorTimerInterval) clearInterval(doctorTimerInterval);
+      const timerLabel = document.getElementById('doctorTimerLabel');
+      
+      doctorTimerInterval = setInterval(() => {
+        doctorSecondsRemaining--;
+        if (doctorSecondsRemaining <= 0) {
+          clearInterval(doctorTimerInterval);
+          timerLabel.innerText = "Tiempo agotado";
+          const timeoutMsg = "Se ha cumplido el tiempo máximo de espera de 10 minutos sin respuesta del especialista. Derivando a triaje avanzado prioritario UAC.";
+          actualizarDialogo(timeoutMsg);
+          hablarIA(timeoutMsg);
+        } else {
+          const mins = Math.floor(doctorSecondsRemaining / 60);
+          const secs = doctorSecondsRemaining % 60;
+          timerLabel.innerText = `Límite: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+      }, 1000);
+    }
+
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'uac_medico_unido' && e.newValue) {
+        if (doctorTimerInterval) clearInterval(doctorTimerInterval);
+        document.getElementById('doctorStatusLabel').innerText = "CONEXIÓN MÉDICA ACTIVA";
+        document.getElementById('doctorTimerLabel').innerText = "En llamada";
+        
+        const docVid = document.getElementById('doctorRemoteVideo');
+        if (!docVid.srcObject) {
+          navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+            docVid.srcObject = stream;
+          }).catch(err => console.warn("Stream de médico simulado:", err));
+        }
+        const avisoEntrada = "El médico se ha unido a la sesión de emergencia.";
+        actualizarDialogo(avisoEntrada);
+        hablarIA(avisoEntrada);
+      }
+    });
+
+    function cerrarSesionPaciente() {
+      document.getElementById('patientAppContainer').style.display = 'none';
+      document.getElementById('patientLoginSection').style.display = 'flex';
+      aiState = "ESPERANDO";
+      if (recognition) { try { recognition.stop(); } catch(e){} }
+      if (doctorTimerInterval) clearInterval(doctorTimerInterval);
+      document.getElementById('doctorEmergencyPanel').classList.remove('active');
+    }
+  </script>
+</body>
+</html>
