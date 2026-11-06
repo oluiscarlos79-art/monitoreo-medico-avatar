@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -357,7 +356,7 @@ function loginPaciente(){
  }
 }
 
-function cargarDashboardPaciente(data){
+async function cargarDashboardPaciente(data){
 
  pacienteActual = data;
 
@@ -394,8 +393,8 @@ function cargarDashboardPaciente(data){
  seleccionarDiaSecuencia(1,prog.fechaInicio);
 
  iniciarConexionServidor();
- initCamera();
  init3DAvatar();
+ await initCamera();
  iniciarSeguimientoCorporal();
 
  const saludo =
@@ -516,14 +515,6 @@ async function initCamera(){
   await video.play();
  }catch(e){
   console.warn(e);
- }
-
- if(poseCamera){
-  try{
-   poseCamera.start();
-  }catch(e){
-   console.warn("No se pudo iniciar el seguimiento:",e);
-  }
  }
 }
 
@@ -777,19 +768,21 @@ function iniciarSeguimientoCorporal(){
   smoothLandmarks:true,
   enableSegmentation:false,
   smoothSegmentation:false,
-  minDetectionConfidence:.6,
-  minTrackingConfidence:.6
+  minDetectionConfidence:.5,
+  minTrackingConfidence:.5
 
  });
 
  pose.onResults(procesarResultadosPose);
 
- poseCamera = new Camera(document.getElementById("webcam"),{
+ const videoElement = document.getElementById("webcam");
+
+ poseCamera = new Camera(videoElement,{
 
   onFrame:async()=>{
 
-   if(pose && document.getElementById("webcam").readyState>=2){
-    await pose.send({image:document.getElementById("webcam")});
+   if(pose && videoElement.readyState>=2){
+    await pose.send({image:videoElement});
    }
 
   },
@@ -799,7 +792,14 @@ function iniciarSeguimientoCorporal(){
 
  });
 
- poseReady = true;
+ poseCamera.start()
+  .then(()=>{
+   poseReady = true;
+   console.log("MediaPipe Camera iniciada correctamente.");
+  })
+  .catch((err)=>{
+   console.error("Error al iniciar MediaPipe Camera:", err);
+  });
 }
 
 function calcularAngulo(a,b,c){
@@ -868,9 +868,9 @@ function procesarResultadosPose(results){
  };
 
  const visible =
-  L.shoulder.visibility>.5 &&
-  L.elbow.visibility>.5 &&
-  L.wrist.visibility>.5;
+  L.shoulder.visibility>.4 &&
+  L.elbow.visibility>.4 &&
+  L.wrist.visibility>.4;
 
  if(visible){
 
@@ -898,9 +898,9 @@ function procesarResultadosPose(results){
  }
 
  if(
-  L.hip.visibility>.5 &&
-  L.knee.visibility>.5 &&
-  L.ankle.visibility>.5
+  L.hip.visibility>.4 &&
+  L.knee.visibility>.4 &&
+  L.ankle.visibility>.4
  ){
 
   const hipAngle = calcularAngulo(
@@ -945,9 +945,9 @@ function detectarRepeticionBrazo(lm){
  const wrist = lm[15];
 
  if(
-  shoulder.visibility<.6 ||
-  elbow.visibility<.6 ||
-  wrist.visibility<.6
+  shoulder.visibility<.4 ||
+  elbow.visibility<.4 ||
+  wrist.visibility<.4
  ){
 
   document.getElementById("poseFeedback").innerText =
