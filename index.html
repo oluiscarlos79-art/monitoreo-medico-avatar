@@ -55,6 +55,9 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .uac-logo-container{position:absolute;top:12px;right:15px;z-index:20;background:rgba(15,15,27,.88);padding:6px 12px;border-radius:10px;display:flex;align-items:center;border:1px solid rgba(0,210,106,.4)}
 .uac-logo-container img{height:46px;width:auto;object-fit:contain}
 
+/* Indicador visual de Actualización 1.1 */
+.update-badge{position:absolute;top:12px;left:15px;z-index:20;background:rgba(0,210,106,0.2);color:#00d26a;padding:6px 12px;border-radius:8px;font-size:.75rem;font-weight:bold;border:1px solid rgba(0,210,106,.4)}
+
 .card{background:#141422;padding:6px 10px;border-radius:6px;border:1px solid #303050}
 .card h3{font-size:.72rem;color:#00d26a;text-transform:uppercase;margin-bottom:3px}
 .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:.7rem}
@@ -89,7 +92,7 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .call-btn{background:#00d26a;color:#101020;border:0}
 .hang-btn{background:#ff4d4d;color:white;border:0;display:none}
 
-#poseCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1)}
+#poseCanvas{position:absolute;inset:0;width:100%;height:75vh;pointer-events:none;transform:scaleX(-1);z-index:15;}
 #connectionStatus{font-size:.65rem;color:#ffd166;margin-top:3px}
 #callStatus{font-size:.7rem;color:#00d26a;margin-top:3px}
 
@@ -99,6 +102,7 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
  .right-panel{height:auto;min-height:70vh}
  .avatar-container{min-height:450px}
  .right-panel video{height:55vh}
+ #poseCanvas{height:55vh}
 }
 </style>
 </head>
@@ -127,6 +131,9 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 </div>
 
 <div id="patientAppContainer">
+
+ <!-- Indicador visual de versión -->
+ <div class="update-badge">Actualización 1.1</div>
 
  <div class="left-panel">
 
@@ -185,8 +192,6 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 
     <video id="doctorRemoteVideo" autoplay playsinline></video>
    </div>
-
-   <canvas id="poseCanvas"></canvas>
   </div>
 
   <div class="precision-panel">
@@ -196,9 +201,7 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
    <div class="feedback-text" id="feedbackMessage">
     Di "Comenzar" o utiliza el botón para iniciar.
    </div>
-<button class="btn-manual-start" onclick="forzarInicioTerapia()">▶ Comenzar terapia</button>
-   
-
+   <button class="btn-manual-start" onclick="forzarInicioTerapia()">▶ Comenzar terapia</button>
   </div>
 
  </div>
@@ -208,7 +211,11 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
    <img src="./escudo_uac.png" alt="Escudo UAC">
   </div>
 
-  <video id="webcam" autoplay playsinline muted></video>
+  <div style="position:relative; width:100%; height:75vh;">
+   <video id="webcam" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1); background:#080810; display:block;"></video>
+   <!-- Canvas de esqueleto posicionado directamente encima del video de la derecha -->
+   <canvas id="poseCanvas"></canvas>
+  </div>
 
   <div class="right-content">
 
@@ -737,7 +744,7 @@ function forzarInicioTerapia(){
 }
 
 /* =========================================================
-   MEDIAPIPE - SEGUIMIENTO CORPORAL
+   MEDIAPIPE - SEGUIMIENTO CORPORAL CORREGIDO
 ========================================================= */
 
 function iniciarSeguimientoCorporal(){
@@ -762,14 +769,15 @@ function iniciarSeguimientoCorporal(){
 
  });
 
+ // Umbrales ajustados a 0.35 para máxima sensibilidad y detección fluida
  pose.setOptions({
 
   modelComplexity:1,
   smoothLandmarks:true,
   enableSegmentation:false,
   smoothSegmentation:false,
-  minDetectionConfidence:.5,
-  minTrackingConfidence:.5
+  minDetectionConfidence:.35,
+  minTrackingConfidence:.35
 
  });
 
@@ -823,10 +831,13 @@ function procesarResultadosPose(results){
  const ctx = canvas.getContext("2d");
  const video = document.getElementById("webcam");
 
+ if(!canvas || !video) return;
+
+ // Sincronización exacta del canvas con las dimensiones del video de la webcam
  if(canvas.width!==video.videoWidth || canvas.height!==video.videoHeight){
 
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
 
  }
 
@@ -845,13 +856,13 @@ function procesarResultadosPose(results){
 
   drawConnectors(ctx,lm,POSE_CONNECTIONS,{
    color:"#00d26a",
-   lineWidth:3
+   lineWidth:4
   });
 
   drawLandmarks(ctx,lm,{
    color:"#ffffff",
-   lineWidth:1,
-   radius:3
+   lineWidth:2,
+   radius:4
   });
 
  }
@@ -868,9 +879,9 @@ function procesarResultadosPose(results){
  };
 
  const visible =
-  L.shoulder.visibility>.4 &&
-  L.elbow.visibility>.4 &&
-  L.wrist.visibility>.4;
+  L.shoulder.visibility>.3 &&
+  L.elbow.visibility>.3 &&
+  L.wrist.visibility>.3;
 
  if(visible){
 
@@ -898,9 +909,9 @@ function procesarResultadosPose(results){
  }
 
  if(
-  L.hip.visibility>.4 &&
-  L.knee.visibility>.4 &&
-  L.ankle.visibility>.4
+  L.hip.visibility>.3 &&
+  L.knee.visibility>.3 &&
+  L.ankle.visibility>.3
  ){
 
   const hipAngle = calcularAngulo(
@@ -945,9 +956,9 @@ function detectarRepeticionBrazo(lm){
  const wrist = lm[15];
 
  if(
-  shoulder.visibility<.4 ||
-  elbow.visibility<.4 ||
-  wrist.visibility<.4
+  shoulder.visibility<.3 ||
+  elbow.visibility<.3 ||
+  wrist.visibility<.3
  ){
 
   document.getElementById("poseFeedback").innerText =
@@ -956,7 +967,6 @@ function detectarRepeticionBrazo(lm){
   return;
  }
 
- // Una coordenada Y menor significa una posición más alta.
  const levantado = wrist.y < shoulder.y-.08;
 
  if(levantado && !brazoArriba){
@@ -991,7 +1001,6 @@ function registrarRepeticion(){
 
  if(aiState!=="TERAPIA")return;
 
- // Ya no existe límite de 10.
  currentRep++;
 
  document.getElementById("repCounter").innerText =
@@ -1003,9 +1012,6 @@ function registrarRepeticion(){
  actualizarDialogo(
   `Repetición ${currentRep}. Continúa a tu ritmo.`
  );
-
- // Pronunciación en cola, con 3 segundos entre números.
- 
 
  const registro = {
 
@@ -1033,7 +1039,6 @@ function registrarRepeticion(){
 
  }
 
- // No finalizar automáticamente al llegar a 10.
 }
 
 /* =========================================================
@@ -1044,7 +1049,6 @@ function iniciarTerapia(){
 
  if(aiState==="TERAPIA" || aiState==="PREPARANDO")return;
 
- // Si estaba pausada, debe continuar sin reiniciar.
  if(aiState==="PAUSADA"){
   continuarTerapia();
   return;
@@ -1052,7 +1056,6 @@ function iniciarTerapia(){
 
  if(aiState!=="ESPERANDO")return;
 
- // Reiniciar únicamente cuando comienza una sesión nueva.
  currentRep = 0;
  sessionResults = [];
  sesionGuardada = false;
@@ -1067,15 +1070,12 @@ function iniciarTerapia(){
   ? diaActivoSeleccionado.numDia
   : 1;
 
- // Todavía no comienza el movimiento.
  aiState = "PREPARANDO";
 
  actualizarDialogo("Sigue las siguientes indicaciones");
 
- // Primero habla. El movimiento comienza cuando termina la voz.
  hablarIA("Sigue las siguientes indicaciones",()=>{
 
-  // Evita iniciar si cambió el estado durante la indicación.
   if(aiState!=="PREPARANDO")return;
 
   aiState = "TERAPIA";
@@ -1088,149 +1088,21 @@ function iniciarTerapia(){
    `Comenzamos la terapia del día ${dia}.`
   );
 
- // Ahora sí comienza la animación del avatar.
-if(fbxMixer && animationActions.length){
+  if(fbxMixer && animationActions.length){
 
- animationActions.forEach(action=>{
-  action.reset();
-  action.paused = false;
-  action.play();
- });
+   animationActions.forEach(action=>{
+    action.reset();
+    action.paused = false;
+    action.play();
+   });
 
-}
-
-// El conteo comienza justo después de iniciar el avatar.
-iniciarConteoVoz();
-
- });
-
-}
-
-
-function detenerColaVoz(){
-
- clearTimeout(speechQueueTimer);
- speechQueueTimer = null;
-
- speechQueue = [];
- speakingNumber = false;
-
- numeroConteoVoz = 0;
- numeroEnReproduccion = null;
- conteoVozActivo = false;
-}
-
-function hablarIA(texto,callback){
-
- detenerColaVoz();
-
- if(!("speechSynthesis" in window)){
-  if(callback)callback();
-  return;
- }
-
- window.speechSynthesis.cancel();
-
- const utterance = new SpeechSynthesisUtterance(texto);
-
- utterance.lang = "es-ES";
- utterance.rate = 1;
- utterance.pitch = 1;
-
- if(callback){
-  utterance.onend = callback;
- }
-
- window.speechSynthesis.speak(utterance);
-}
-
-function actualizarDialogo(texto){
-
- document.getElementById("speechText").innerText = texto;
-}
-
-// Inicia el conteo desde 1.
-function iniciarConteoVoz(){
-
- if(!("speechSynthesis" in window))return;
-
- numeroConteoVoz = 0;
- numeroEnReproduccion = null;
- conteoVozActivo = true;
- speakingNumber = false;
-
- reproducirSiguienteNumero();
-}
-
-// Pronuncia del 1 al 5.
-function reproducirSiguienteNumero(){
-
- if(aiState !== "TERAPIA" || !conteoVozActivo)return;
-
- if(speakingNumber)return;
-
- // Al completar el número 5, finaliza la sesión.
- if(numeroConteoVoz >= 5){
-
-  conteoVozActivo = false;
-
-  finalizarTerapia();
-
-  return;
- }
-
- speakingNumber = true;
-
- // Si se interrumpió un número, vuelve a pronunciarlo.
- if(numeroEnReproduccion === null){
-  numeroEnReproduccion = numeroConteoVoz + 1;
- }
-
- const numero = numeroEnReproduccion;
-
- const utterance = new SpeechSynthesisUtterance(String(numero));
-
- utterance.lang = "es-ES";
- utterance.rate = 1;
- utterance.pitch = 1;
-
- utterance.onend = ()=>{
-
-  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
-
-  numeroConteoVoz = numero;
-  numeroEnReproduccion = null;
-  speakingNumber = false;
-
-  // Después del número 5, finalizar inmediatamente.
-  if(numeroConteoVoz >= 5){
-   reproducirSiguienteNumero();
-   return;
   }
 
-  // Esperar 3 segundos antes del siguiente número.
-  speechQueueTimer = setTimeout(()=>{
-   reproducirSiguienteNumero();
-  },3000);
+  iniciarConteoVoz();
 
- };
+ });
 
- utterance.onerror = ()=>{
-
-  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
-
-  speakingNumber = false;
-
-  // Reintentar el mismo número.
-  speechQueueTimer = setTimeout(()=>{
-   reproducirSiguienteNumero();
-  },3000);
-
- };
-
- window.speechSynthesis.speak(utterance);
 }
-
 
 function finalizarTerapia(){
 
@@ -1263,7 +1135,6 @@ function finalizarTerapia(){
 
  actualizarDialogo(fin);
 
- // Guardar solo una vez por sesión.
  if(!sesionGuardada){
 
   guardarResultadosSesion(diaActual);
@@ -1329,48 +1200,7 @@ function guardarResultadosSesion(dia){
 }
 
 /* =========================================================
-   DESBLOQUEO DE DÍAS
-========================================================= */
-
-function desbloquearSiguienteDia24h(numCompletado){
-
- if(!pacienteActual)return;
-
- const cedula = pacienteActual.paciente.documento;
- const siguienteDia = numCompletado+1;
- const key = `uac_next_day_${cedula}`;
-
- const ahora = Date.now();
-
- localStorage.setItem(key,JSON.stringify({
-
-  dia:siguienteDia,
-  disponibleDesde:ahora+86400000
-
- }));
-
- const siguienteDisponible = JSON.parse(
-  localStorage.getItem(key)
- );
-
- if(
-  siguienteDisponible &&
-  ahora>=siguienteDisponible.disponibleDesde
- ){
-
-  maxUnlockedDay = Math.max(maxUnlockedDay,siguienteDia);
-
-  localStorage.setItem(
-   `uac_max_day_${cedula}`,
-   String(maxUnlockedDay)
-  );
-
- }
-
-}
-
-/* =========================================================
-   AVATAR 3D - CONSERVA terapia.1.fbx
+   AVATAR 3D
 ========================================================= */
 
 function init3DAvatar(){
@@ -1468,11 +1298,6 @@ function init3DAvatar(){
      animationActions.push(action);
 
     });
-
-    console.log(
-     "Animaciones FBX encontradas:",
-     animationActions.length
-    );
 
    }
 
@@ -1578,10 +1403,6 @@ function iniciarConexionServidor(){
   document.getElementById("connectionStatus").innerText =
    "Servidor: no conectado (falta servidor compartido)";
 
-  console.warn(
-   "Socket.IO no está disponible. Ejecuta el portal desde server.js."
-  );
-
   return;
 
  }
@@ -1618,73 +1439,45 @@ function iniciarConexionServidor(){
   );
 
   if(aceptar){
-
    aceptarLlamadaEntrante();
-
   }else{
-
    socket.emit("patient:call-rejected",{
     cedula:pacienteActual.paciente.documento
    });
-
   }
 
  });
 
  socket.on("doctor:joined",()=>{
-
   document.getElementById("doctorStatusLabel").innerText =
    "El especialista se ha conectado.";
-
  });
 
  socket.on("doctor:offer",async(data)=>{
-
   await recibirOferta(data.offer);
-
  });
 
  socket.on("doctor:ice-candidate",async(data)=>{
-
   if(peerConnection && data.candidate){
-
    try{
-
     await peerConnection.addIceCandidate(
      new RTCIceCandidate(data.candidate)
     );
-
    }catch(error){
-
     console.error(error);
-
    }
-
   }
-
  });
 
  socket.on("doctor:hangup",()=>{
-
-  finalizarLlamadaLocal(
-   "El médico finalizó la llamada."
-  );
-
+  finalizarLlamadaLocal("El médico finalizó la llamada.");
  });
 
  socket.on("doctor:alert-acknowledged",()=>{
-
   document.getElementById("doctorStatusLabel").innerText =
    "El médico confirmó la solicitud.";
-
-  actualizarDialogo(
-   "El médico ha confirmado tu solicitud de ayuda."
-  );
-
-  hablarIA(
-   "El médico ha confirmado tu solicitud de ayuda."
-  );
-
+  actualizarDialogo("El médico ha confirmado tu solicitud de ayuda.");
+  hablarIA("El médico ha confirmado tu solicitud de ayuda.");
  });
 
 }
@@ -1696,63 +1489,33 @@ function iniciarConexionServidor(){
 function simularAlertaClinica(){
 
  if(!pacienteActual){
-
   alert("Primero debes iniciar sesión.");
   return;
-
  }
 
  aiState = "ALERTA_MEDICA";
 
  const alerta = {
-
   cedula:pacienteActual.paciente.documento,
-
-  nombre:
-   `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
-
+  nombre:`${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
   timestamp:Date.now(),
-
   estado:"SOLICITADA",
-
   tipo:"SOLICITUD_DE_AYUDA"
-
  };
 
- actualizarDialogo(
-  "Has solicitado ayuda médica. Esperando confirmación del especialista."
- );
-
- hablarIA(
-  "Has solicitado ayuda médica. Estamos enviando tu solicitud."
- );
-
- document.getElementById("feedbackMessage").innerText =
-  "Solicitud de ayuda enviada.";
-
+ actualizarDialogo("Has solicitado ayuda médica. Esperando confirmación del especialista.");
+ hablarIA("Has solicitado ayuda médica. Estamos enviando tu solicitud.");
+ document.getElementById("feedbackMessage").innerText = "Solicitud de ayuda enviada.";
  document.getElementById("doctorEmergencyPanel").classList.add("active");
 
  doctorSecondsRemaining = 600;
-
  iniciarTemporizadorMedico();
 
- localStorage.setItem(
-  "uac_alerta_activa",
-  JSON.stringify(alerta)
- );
+ localStorage.setItem("uac_alerta_activa",JSON.stringify(alerta));
 
  if(socket && socket.connected){
-
   socket.emit("patient:sos",alerta);
-
- }else{
-
-  alert(
-   "La solicitud quedó registrada localmente, pero no se pudo notificar al médico porque el servidor no está conectado."
-  );
-
  }
-
 }
 
 function iniciarTemporizadorMedico(){
@@ -1772,20 +1535,8 @@ function iniciarTemporizadorMedico(){
    `Tiempo de espera: ${String(mins).padStart(2,"0")}:${String(secs).padStart(2,"0")}`;
 
   if(doctorSecondsRemaining<=0){
-
    clearInterval(doctorTimerInterval);
-
-   document.getElementById("doctorTimerLabel").innerText =
-    "Tiempo de espera cumplido";
-
-   actualizarDialogo(
-    "Se cumplió el tiempo de espera configurado. Busca atención médica directamente si necesitas ayuda urgente."
-   );
-
-   hablarIA(
-    "Se cumplió el tiempo de espera. Si necesitas ayuda urgente, contacta directamente los servicios de emergencia."
-   );
-
+   document.getElementById("doctorTimerLabel").innerText = "Tiempo de espera cumplido";
   }
 
  },1000);
@@ -1805,239 +1556,70 @@ async function crearConexionWebRTC(){
  peerConnection = new RTCPeerConnection(RTC_CONFIGURATION);
 
  if(localStream){
-
   localStream.getTracks().forEach(track=>{
-
    peerConnection.addTrack(track,localStream);
-
   });
-
  }
 
  peerConnection.ontrack = event=>{
-
-  const remoteVideo =
-   document.getElementById("doctorRemoteVideo");
-
+  const remoteVideo = document.getElementById("doctorRemoteVideo");
   remoteVideo.srcObject = event.streams[0];
-
   remoteVideo.play().catch(()=>{});
-
  };
 
  peerConnection.onicecandidate = event=>{
-
   if(event.candidate && socket && socket.connected){
-
    socket.emit("patient:ice-candidate",{
-
     candidate:event.candidate,
-
     cedula:pacienteActual.paciente.documento
-
    });
-
   }
-
- };
-
- peerConnection.onconnectionstatechange = ()=>{
-
-  const state = peerConnection.connectionState;
-
-  document.getElementById("callStatus").innerText =
-   "Videollamada: "+state;
-
-  if(state==="failed" || state==="disconnected"){
-
-   console.warn("Estado de conexión WebRTC:",state);
-
-  }
-
  };
 
  return peerConnection;
-
-}
-
-async function solicitarVideollamada(){
-
- if(!pacienteActual)return;
-
- if(!socket || !socket.connected){
-
-  alert(
-   "No hay conexión con el servidor. No se puede solicitar la videollamada."
-  );
-
-  return;
-
- }
-
- if(!localStream){
-
-  alert(
-   "Debes permitir el acceso a la cámara antes de iniciar una videollamada."
-  );
-
-  return;
-
- }
-
- document.getElementById("doctorEmergencyPanel").classList.add("active");
-
- document.getElementById("doctorStatusLabel").innerText =
-  "Solicitud de videollamada enviada.";
-
- socket.emit("patient:call-request",{
-
-  cedula:pacienteActual.paciente.documento,
-
-  nombre:
-   `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`
-
- });
-
- actualizarDialogo(
-  "Tu solicitud de videollamada fue enviada al médico."
- );
-
- hablarIA(
-  "Tu solicitud de videollamada fue enviada al médico."
- );
-
-}
-
-async function aceptarLlamadaEntrante(){
-
- if(!socket || !socket.connected)return;
-
- if(!localStream){
-
-  try{
-
-   localStream = await navigator.mediaDevices.getUserMedia({
-    video:true,
-    audio:true
-   });
-
-  }catch(error){
-
-   alert(
-    "No fue posible acceder a la cámara o al micrófono."
-   );
-
-   return;
-
-  }
-
- }
-
- socket.emit("patient:call-accepted",{
-
-  cedula:pacienteActual.paciente.documento
-
- });
-
-
-
 }
 
 async function recibirOferta(offer){
-
  try{
-
   await crearConexionWebRTC();
-
-  await peerConnection.setRemoteDescription(
-   new RTCSessionDescription(offer)
-  );
-
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
   const answer = await peerConnection.createAnswer();
-
   await peerConnection.setLocalDescription(answer);
 
   socket.emit("patient:answer",{
-
    answer:answer,
-
    cedula:pacienteActual.paciente.documento
-
   });
 
   callActive = true;
-
- 
-  document.getElementById("doctorStatusLabel").innerText =
-   "Videollamada activa";
-
-  document.getElementById("callStatus").innerText =
-   "Videollamada: activa";
-
-  actualizarDialogo(
-   "La videollamada con el médico está activa."
-  );
-
+  document.getElementById("doctorStatusLabel").innerText = "Videollamada activa";
+  document.getElementById("callStatus").innerText = "Videollamada: activa";
+  actualizarDialogo("La videollamada con el médico está activa.");
  }catch(error){
-
-  console.error(
-   "Error al aceptar la videollamada:",
-   error
-  );
-
-  alert(
-   "No fue posible establecer la videollamada."
-  );
-
+  console.error("Error al aceptar la videollamada:",error);
  }
-
 }
 
 async function colgarLlamada(){
-
  if(socket && socket.connected){
-
   socket.emit("patient:hangup",{
-
-   cedula:pacienteActual
-    ? pacienteActual.paciente.documento
-    : null
-
+   cedula:pacienteActual ? pacienteActual.paciente.documento : null
   });
-
  }
-
- finalizarLlamadaLocal(
-  "Has finalizado la videollamada."
- );
-
+ finalizarLlamadaLocal("Has finalizado la videollamada.");
 }
 
 function finalizarLlamadaLocal(mensaje){
-
  callActive = false;
-
  if(peerConnection){
-
   peerConnection.close();
   peerConnection = null;
-
  }
-
- const remoteVideo =
-  document.getElementById("doctorRemoteVideo");
-
+ const remoteVideo = document.getElementById("doctorRemoteVideo");
  remoteVideo.srcObject = null;
-
-
- document.getElementById("callStatus").innerText =
-  "Videollamada: finalizada";
-
- document.getElementById("doctorStatusLabel").innerText =
-  "Videollamada finalizada.";
-
+ document.getElementById("callStatus").innerText = "Videollamada: finalizada";
+ document.getElementById("doctorStatusLabel").innerText = "Videollamada finalizada.";
  actualizarDialogo(mensaje);
-
 }
 
 /* =========================================================
@@ -2047,15 +1629,10 @@ function finalizarLlamadaLocal(mensaje){
 function cerrarSesionPaciente(){
 
  aiState = "CERRADA";
-
  detenerColaVoz();
 
  if(recognition){
-
-  try{
-   recognition.stop();
-  }catch(e){}
-
+  try{recognition.stop();}catch(e){}
  }
 
  if(doctorTimerInterval){
@@ -2063,35 +1640,22 @@ function cerrarSesionPaciente(){
  }
 
  if(poseCamera){
-
-  try{
-   poseCamera.stop();
-  }catch(e){}
-
+  try{poseCamera.stop();}catch(e){}
  }
 
  if(localStream){
-
-  localStream.getTracks().forEach(track=>{
-   track.stop();
-  });
-
+  localStream.getTracks().forEach(track=>{track.stop();});
   localStream = null;
-
  }
 
  if(socket){
-
   socket.disconnect();
   socket = null;
-
  }
 
  if(peerConnection){
-
   peerConnection.close();
   peerConnection = null;
-
  }
 
  if(fbxMixer){
@@ -2099,13 +1663,9 @@ function cerrarSesionPaciente(){
  }
 
  document.getElementById("doctorEmergencyPanel").classList.remove("active");
-
  document.getElementById("patientAppContainer").style.display = "none";
-
  document.getElementById("patientLoginSection").style.display = "flex";
-
  document.getElementById("webcam").srcObject = null;
-
  document.getElementById("doctorRemoteVideo").srcObject = null;
 
  if("speechSynthesis" in window){
