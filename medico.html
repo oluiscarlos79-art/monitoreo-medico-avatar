@@ -86,6 +86,12 @@
     .call-box video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
     .mode-tag { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); color: #00d26a; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; z-index: 5; border: 1px solid rgba(0,210,106,0.3); }
   </style>
+  <style>
+    #callStagesGrid { grid-template-columns: 2.4fr 1fr; grid-template-rows: 1fr 1fr; min-height: 470px; }
+    #callStagesGrid > .call-box:nth-child(1) { grid-column: 2; grid-row: 1; }
+    #callStagesGrid > .call-box:nth-child(2) { grid-column: 1; grid-row: 1 / span 2; }
+    #callStagesGrid > .call-box:nth-child(3) { grid-column: 2; grid-row: 2; }
+  </style>
 </head>
 <body>
 
@@ -300,6 +306,12 @@
       </table>
 
       <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
+        <h3>🗓️ Terapias programadas <span id="terapiasResumenMedico" style="font-size:0.75rem; color:#a0a0c0; font-weight:normal;"></span></h3>
+        <div style="font-size:0.75rem; color:#a0a0c0; margin-top:4px;">Cada terapia se habilita sola en su fecha. Aquí puedes cambiar la fecha, habilitarla, bloquearla o reabrirla para que el paciente la repita.</div>
+        <div id="listaTerapias" style="margin-top:10px; max-height:260px; overflow-y:auto; font-size:0.85rem;"></div>
+      </div>
+
+      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
         <h3>📝 Apuntes del médico</h3>
         <div id="listaApuntes" style="margin:10px 0; max-height:200px; overflow-y:auto; font-size:0.85rem;"></div>
         <textarea id="apunteHistorial" rows="3" placeholder="Escribe un nuevo apunte clínico..."></textarea>
@@ -346,7 +358,7 @@
         <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('finalizar')">⏹ Finalizar</button>
       </div>
 
-      <div class="call-stages" style="grid-template-columns: 1fr 1fr 0.6fr;">
+      <div class="call-stages" id="callStagesGrid">
         <div class="call-box" style="position:relative;">
           <span class="mode-tag">CÁMARA DEL PACIENTE</span>
           <video id="patientLiveFeedVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:block;"></video>
@@ -356,13 +368,10 @@
           </div>
         </div>
 
-        <div class="call-box" style="position:relative;">
-          <span class="mode-tag">AVATAR / TERAPIA DEL PACIENTE</span>
-          <video id="patientAvatarVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:contain; border-radius:6px; display:block;"></video>
-          <div id="avatarFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace; font-size:0.8rem; text-align:center; padding:10px;">
-            <div style="font-size:3rem;">🧍</div>
-            <p style="margin-top:8px;">Esperando el avatar del paciente...</p>
-          </div>
+        <div class="call-box" id="espejoBox" style="position:relative; overflow:hidden; background:#000;">
+          <span class="mode-tag" style="z-index:6;">PANTALLA DEL PACIENTE (EN VIVO)</span>
+          <button onclick="pantallaCompletaEspejo('espejoBox')" style="position:absolute; top:8px; right:8px; z-index:6; background:rgba(0,0,0,0.7); color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:4px 10px; font-size:0.75rem;">⛶ Pantalla completa</button>
+          <iframe id="espejoFrame" title="Pantalla del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
         </div>
 
         <div class="call-box" style="position:relative;">
@@ -386,6 +395,19 @@
     </div>
   </div>
 
+  <div id="observarModal" style="display:none; position:fixed; inset:0; background:#05050a; z-index:1500; flex-direction:column;">
+    <div style="display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0f0f1b; border-bottom:1px solid #303050;">
+      <span id="observarTitulo" style="font-weight:bold; color:#00d26a;">Observando</span>
+      <span id="observarEstado" style="font-size:0.8rem; color:#ffd700;"></span>
+      <span style="flex:1;"></span>
+      <button onclick="pantallaCompletaEspejo('observarBox')" style="background:transparent; color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:6px 12px; font-size:0.8rem;">⛶ Pantalla completa</button>
+      <button onclick="cerrarObservacion()" style="background:transparent; color:#ff4d4d; border:1px solid #ff4d4d; border-radius:4px; padding:6px 12px; font-size:0.8rem;">✖ Cerrar</button>
+    </div>
+    <div id="observarBox" style="position:relative; flex:1; overflow:hidden; background:#000;">
+      <iframe id="observarFrame" title="Observación del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
+    </div>
+  </div>
+
   <script>
     let socket = null;
     let streamMedicoActivo = null;
@@ -396,6 +418,8 @@
     let alertaActual = null;
     let pacientesEnLinea = new Set();
     let ultimasMetricas = {};
+    let ultimoEstadoPaciente = {};
+    const espejos = {};
     let trAvatar = null;
     let streamAvatarPaciente = null;
     let historialCedulaActual = null;
@@ -496,7 +520,11 @@
       socket.on('patient:state', (d) => {
         if (!d || !d.cedula) return;
         ultimasMetricas[String(d.cedula)] = d;
+        ultimoEstadoPaciente[String(d.cedula)] = d;
         if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
+        Object.keys(espejos).forEach((fid) => {
+          if (espejos[fid].cedula === String(d.cedula)) enviarEstadoAEspejo(fid);
+        });
       });
 
       socket.on('patient:repetition', (d) => {
@@ -655,8 +683,6 @@
           if (!yaEnvia) pc.addTransceiver(tipo, { direction: 'recvonly' });
         });
 
-        // Último video recibido: el avatar 3D que ve el paciente
-        trAvatar = pc.addTransceiver('video', { direction: 'recvonly' });
 
         pc.ontrack = (event) => {
           if (trAvatar && event.transceiver === trAvatar) {
@@ -675,6 +701,7 @@
           v.play().catch(() => {});
           if (event.track.kind === 'video') {
             document.getElementById('patientFeedPlaceholder').style.display = 'none';
+            asignarCamaraEspejo('espejoFrame');
           }
         };
 
@@ -807,7 +834,8 @@
           modelo3D: actualizarModeloTerapia()
         },
         sesionesHistorial: sesionesPrevias,
-        apuntesMedico: existingIndex >= 0 ? (lista[existingIndex].apuntesMedico || []) : []
+        apuntesMedico: existingIndex >= 0 ? (lista[existingIndex].apuntesMedico || []) : [],
+        terapias: existingIndex >= 0 ? (lista[existingIndex].terapias || {}) : {}
       };
 
       if (existingIndex >= 0) lista[existingIndex] = fichaPaciente;
@@ -845,11 +873,220 @@
           <td>${prog.fechaInicio} al ${prog.fechaFin}</td>
           <td><span style="font-family:monospace; color:#00d26a;">${prog.modelo3D || 'terapia.1.fbx'}</span></td>
           <td><button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirModalHistorialDiagnostico('${p.documento}')">📊 Diagnóstico</button></td>
-          <td><button class="btn-call" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 En Vivo</button></td>
+          <td><button class="btn-call" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 En Vivo</button> <button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="observarPaciente('${p.documento}')">👁 Observar</button></td>
           <td><button class="btn-danger" style="padding:6px 10px; font-size:0.75rem;" onclick="eliminarPaciente('${p.documento}')">🗑️</button></td>
         `;
         tbody.appendChild(tr);
       });
+    }
+
+    /* ---------- Pantalla espejo del paciente ---------- */
+
+    function ajustarEspejo(frameId) {
+      const e = espejos[frameId];
+      if (!e) return;
+      const box = document.getElementById(e.boxId);
+      const f = document.getElementById(frameId);
+      if (!box || !f || !box.clientWidth || !box.clientHeight) return;
+      const s = Math.min(box.clientWidth / 1280, box.clientHeight / 720);
+      f.style.transform = 'scale(' + s + ')';
+      f.style.left = Math.max(0, (box.clientWidth - 1280 * s) / 2) + 'px';
+      f.style.top = Math.max(0, (box.clientHeight - 720 * s) / 2) + 'px';
+    }
+
+    function enviarEstadoAEspejo(frameId) {
+      const e = espejos[frameId];
+      const f = document.getElementById(frameId);
+      if (!e || !f || !f.contentWindow) return;
+      const d = ultimoEstadoPaciente[e.cedula];
+      if (!d) return;
+      f.contentWindow.postMessage({ tipo: 'uac-estado', estado: d }, location.origin);
+    }
+
+    function asignarCamaraEspejo(frameId) {
+      const f = document.getElementById(frameId);
+      if (!f || !streamPaciente) return;
+      try {
+        const v = f.contentDocument && f.contentDocument.getElementById('webcam');
+        if (v && v.srcObject !== streamPaciente) {
+          v.srcObject = streamPaciente;
+          v.play().catch(() => {});
+        }
+      } catch (err) {
+        console.warn('No se pudo mostrar la cámara en la pantalla espejo:', err);
+      }
+    }
+
+    function abrirEspejo(frameId, boxId, cedula) {
+      const f = document.getElementById(frameId);
+      if (!f) return;
+      espejos[frameId] = { cedula: String(cedula), boxId: boxId };
+      f.onload = () => {
+        ajustarEspejo(frameId);
+        enviarEstadoAEspejo(frameId);
+        asignarCamaraEspejo(frameId);
+      };
+      f.src = '/index.html?espejo=' + encodeURIComponent(cedula);
+      setTimeout(() => ajustarEspejo(frameId), 200);
+    }
+
+    function cerrarEspejo(frameId) {
+      delete espejos[frameId];
+      const f = document.getElementById(frameId);
+      if (f) f.src = 'about:blank';
+    }
+
+    function pantallaCompletaEspejo(boxId) {
+      const b = document.getElementById(boxId);
+      if (!b) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (b.requestFullscreen) {
+        b.requestFullscreen().catch(() => {});
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      setTimeout(() => Object.keys(espejos).forEach(ajustarEspejo), 100);
+    });
+    window.addEventListener('resize', () => Object.keys(espejos).forEach(ajustarEspejo));
+
+    /* ---------- Observación en silencio (sin cámara, sin micrófono, sin llamada) ---------- */
+
+    function actualizarEstadoObservacion(cedula) {
+      const el = document.getElementById('observarEstado');
+      if (!pacientesEnLinea.has(String(cedula))) {
+        el.innerText = 'Paciente no conectado';
+        return;
+      }
+      const d = ultimoEstadoPaciente[String(cedula)];
+      el.innerText = d
+        ? `${ETIQUETAS_ESTADO[d.estado] || d.estado} · Repeticiones: ${d.repeticiones != null ? d.repeticiones : 0}`
+        : 'Conectado, esperando datos...';
+    }
+
+    function observarPaciente(cedula) {
+      cedula = String(cedula);
+      const ficha = obtenerBasePacientes().find(p => String(p.paciente.documento) === cedula);
+      const nombre = ficha ? `${ficha.paciente.nombres} ${ficha.paciente.apellidos}` : cedula;
+      document.getElementById('observarTitulo').innerText = `👁 Observando: ${nombre} (${cedula})`;
+      document.getElementById('observarModal').style.display = 'flex';
+      actualizarEstadoObservacion(cedula);
+      abrirEspejo('observarFrame', 'observarBox', cedula);
+    }
+
+    function cerrarObservacion() {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      cerrarEspejo('observarFrame');
+      document.getElementById('observarModal').style.display = 'none';
+    }
+
+    setInterval(() => {
+      const e = espejos['observarFrame'];
+      if (e) actualizarEstadoObservacion(e.cedula);
+    }, 1000);
+
+    /* ---------- Terapias programadas ---------- */
+
+    function fechaLocalMedico(d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function calcularDiasTerapia(f) {
+      const prog = f.programacionMensual || {};
+      if (!prog.fechaInicio || !prog.fechaFin) return [];
+      const ini = new Date(prog.fechaInicio + 'T00:00:00');
+      const fin = new Date(prog.fechaFin + 'T00:00:00');
+      const total = Math.floor((fin - ini) / 86400000) + 1;
+      const dias = [];
+      for (let i = 0; i < total; i++) {
+        const d = new Date(ini);
+        d.setDate(ini.getDate() + i);
+        dias.push({ dia: i + 1, fecha: fechaLocalMedico(d) });
+      }
+      return dias;
+    }
+
+    function estadoTerapia(f, dia, fechaBase) {
+      const cfg = (f.terapias && f.terapias[dia]) || {};
+      const programada = cfg.programada || fechaBase;
+      const manual = typeof cfg.habilitada === 'boolean';
+      const habilitada = manual ? cfg.habilitada : (programada <= fechaLocalMedico(new Date()));
+      const completada = (f.sesionesHistorial || []).some(
+        s => Number(s.dia) === dia && (!cfg.reabiertaEn || String(s.fecha) > cfg.reabiertaEn)
+      );
+      return { programada, manual, habilitada, completada };
+    }
+
+    function enviarTerapiasAlPaciente(cedula, terapias) {
+      if (socket && socket.connected) {
+        socket.emit('doctor:terapias', { cedula: String(cedula), terapias: terapias });
+      }
+    }
+
+    function modificarTerapia(dia, cambios) {
+      const lista = obtenerBasePacientes();
+      const i = lista.findIndex(p => String(p.paciente.documento) === String(historialCedulaActual));
+      if (i < 0) return;
+      if (!lista[i].terapias) lista[i].terapias = {};
+      lista[i].terapias[dia] = Object.assign({}, lista[i].terapias[dia] || {}, cambios);
+      guardarBasePacientes(lista);
+      enviarTerapiasAlPaciente(historialCedulaActual, lista[i].terapias);
+      renderTerapias(lista[i]);
+    }
+
+    function renderTerapias(f) {
+      const cont = document.getElementById('listaTerapias');
+      cont.innerHTML = '';
+      const dias = calcularDiasTerapia(f);
+      let completadas = 0;
+      let habilitadas = 0;
+
+      dias.forEach((d) => {
+        const est = estadoTerapia(f, d.dia, d.fecha);
+        if (est.completada) completadas++;
+        else if (est.habilitada) habilitadas++;
+
+        const fila = document.createElement('div');
+        fila.style.cssText = 'display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px solid #303050;';
+
+        const nombre = document.createElement('span');
+        nombre.style.cssText = 'width:60px; font-weight:bold;';
+        nombre.textContent = 'Día ' + d.dia;
+
+        const fecha = document.createElement('input');
+        fecha.type = 'date';
+        fecha.value = est.programada;
+        fecha.style.cssText = 'width:150px; padding:4px 6px;';
+        fecha.onchange = () => { if (fecha.value) modificarTerapia(d.dia, { programada: fecha.value }); };
+
+        const chip = document.createElement('span');
+        chip.style.cssText = 'min-width:150px; color:' + (est.completada ? '#00d26a' : est.habilitada ? '#ffd700' : '#a0a0c0') + ';';
+        chip.textContent = (est.completada ? '✅ Completada' : est.habilitada ? '▶ Habilitada' : '🔒 Bloqueada') + (est.manual ? ' (manual)' : ' (por fecha)');
+
+        const botones = [
+          ['Habilitar', 'btn-call', { habilitada: true }],
+          ['Bloquear', 'btn-danger', { habilitada: false }],
+          ['Reabrir', 'btn-info', { habilitada: true, reabiertaEn: new Date().toISOString() }],
+          ['Por fecha', 'btn-secondary', { habilitada: undefined }]
+        ];
+        fila.appendChild(nombre);
+        fila.appendChild(fecha);
+        fila.appendChild(chip);
+        botones.forEach((b) => {
+          const btn = document.createElement('button');
+          btn.className = b[1];
+          btn.style.cssText = 'padding:4px 10px; font-size:0.75rem;';
+          btn.textContent = b[0];
+          btn.onclick = () => modificarTerapia(d.dia, b[2]);
+          fila.appendChild(btn);
+        });
+        cont.appendChild(fila);
+      });
+
+      if (dias.length === 0) cont.textContent = 'Este paciente no tiene programación de terapias.';
+      document.getElementById('terapiasResumenMedico').innerText =
+        dias.length ? `· ${dias.length} terapias · ${completadas} completadas · ${habilitadas} habilitadas` : '';
     }
 
     function enviarComandoTerapia(comando) {
@@ -1056,6 +1293,7 @@
       renderHistoriaClinica(found);
       renderSesiones(found);
       renderApuntes(found);
+      renderTerapias(found);
       document.getElementById('historialClinicoModal').style.display = 'flex';
     }
 
@@ -1140,6 +1378,7 @@
       document.getElementById('liveCallModal').style.display = 'flex';
 
       pintarMetricas(ultimasMetricas[cedula] || null);
+      abrirEspejo('espejoFrame', 'espejoBox', cedula);
       mostrarEstadoPaciente('Preparando equipo médico...');
       await prepararMediosMedico();
 
@@ -1177,6 +1416,8 @@
     }
 
     function cerrarSesionEnVivo() {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      cerrarEspejo('espejoFrame');
       colgarLlamadaActual();
 
       if (streamMedicoActivo) {
