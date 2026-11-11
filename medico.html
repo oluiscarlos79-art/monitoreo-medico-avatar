@@ -261,9 +261,14 @@
         <button class="btn-secondary" onclick="cerrarModalHistorial()">✕ Cerrar Ventana</button>
       </div>
 
+      <div id="historiaClinicaCard" style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
+        <h3>Historia clínica</h3>
+        <div id="historiaClinicaGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px 18px; margin-top:10px; font-size:0.85rem;"></div>
+      </div>
+
       <div class="kpi-cards">
         <div class="kpi-card"><div class="lbl">Terapias Realizadas</div><div class="val" id="kpiTotalSesiones">12</div></div>
-        <div class="kpi-card"><div class="lbl">Minutos Totales</div><div class="val" id="kpiMinutosTotales">315 min</div></div>
+        <div class="kpi-card"><div class="lbl">Repeticiones Totales</div><div class="val" id="kpiMinutosTotales">315 min</div></div>
         <div class="kpi-card"><div class="lbl">Precisión Global ROM / IA</div><div class="val" id="kpiPrecisionGlobal">88.4%</div></div>
         <div class="kpi-card"><div class="lbl">Índice Bien / Mal</div><div class="val" id="kpiRatioEjecucion" style="color:#2ecc71;">91% Bien</div></div>
       </div>
@@ -293,12 +298,22 @@
         </thead>
         <tbody id="tablaSesionesDetalle"></tbody>
       </table>
+
+      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
+        <h3>📝 Apuntes del médico</h3>
+        <div id="listaApuntes" style="margin:10px 0; max-height:200px; overflow-y:auto; font-size:0.85rem;"></div>
+        <textarea id="apunteHistorial" rows="3" placeholder="Escribe un nuevo apunte clínico..."></textarea>
+        <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
+          <button class="btn-call" onclick="guardarApunteHistorial()">💾 Guardar apunte</button>
+          <span id="apunteHistorialEstado" style="font-size:0.75rem; color:#00d26a;"></span>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- MODAL DE VIDEOCONFERENCIA -->
   <div id="liveCallModal">
-    <div class="call-container">
+    <div class="call-container" style="max-width:1100px; max-height:calc(100vh - 50px); overflow-y:auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 12px;">
         <div>
           <span class="status-badge" style="background:rgba(0,210,106,0.3);">CONEXIÓN DIRECTA EN VIVO UAC</span>
@@ -310,13 +325,43 @@
         </div>
       </div>
 
-      <div class="call-stages">
+      <div id="liveMetricsBar" style="display:flex; gap:18px; flex-wrap:wrap; font-family:monospace; font-size:0.8rem; color:#a0a0c0; padding:8px 2px;">
+        <span>Hombro: <b id="mHombro" style="color:#00d26a;">--</b></span>
+        <span>Codo: <b id="mCodo" style="color:#00d26a;">--</b></span>
+        <span>Cadera: <b id="mCadera" style="color:#00d26a;">--</b></span>
+        <span>Repeticiones: <b id="mRep" style="color:#00d26a;">0</b></span>
+        <span>Resp: <b id="mResp" style="color:#00d26a;">--</b></span>
+        <span>SpO₂: <b id="mSpO2" style="color:#00d26a;">--</b></span>
+        <span>Temp: <b id="mTemp" style="color:#00d26a;">--</b></span>
+        <span>Terapia: <b id="mEstadoTerapia" style="color:#ffd700;">--</b></span>
+        <span id="mEstadoLlamada" style="color:#ffd700;">Sin llamada</span>
+      </div>
+
+      <div id="liveControlBar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:0.75rem; color:#a0a0c0;">Control de la terapia del paciente:</span>
+        <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('iniciar')">▶ Iniciar</button>
+        <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('pausar')">⏸ Pausar</button>
+        <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('continuar')">⏯ Continuar</button>
+        <button class="btn-secondary" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('reiniciar')">🔄 Reiniciar</button>
+        <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('finalizar')">⏹ Finalizar</button>
+      </div>
+
+      <div class="call-stages" style="grid-template-columns: 1fr 1fr 0.6fr;">
         <div class="call-box" style="position:relative;">
           <span class="mode-tag">CÁMARA DEL PACIENTE</span>
           <video id="patientLiveFeedVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:block;"></video>
           <div id="patientFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace;">
             <div style="font-size:3rem;">👤</div>
             <p style="margin-top:8px;">Esperando flujo del paciente...</p>
+          </div>
+        </div>
+
+        <div class="call-box" style="position:relative;">
+          <span class="mode-tag">AVATAR / TERAPIA DEL PACIENTE</span>
+          <video id="patientAvatarVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:contain; border-radius:6px; display:block;"></video>
+          <div id="avatarFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace; font-size:0.8rem; text-align:center; padding:10px;">
+            <div style="font-size:3rem;">🧍</div>
+            <p style="margin-top:8px;">Esperando el avatar del paciente...</p>
           </div>
         </div>
 
@@ -328,14 +373,43 @@
           </div>
         </div>
       </div>
+
+      <div style="background:#0b0b14; border:1px solid #303050; border-radius:8px; padding:10px;">
+        <label style="font-size:0.75rem; color:#a0a0c0;">📝 Apunte clínico (se guarda en la historia clínica del paciente)</label>
+        <textarea id="apunteEnVivo" rows="2" placeholder="Escribe aquí tu observación..."></textarea>
+        <div style="display:flex; gap:8px; margin-top:6px; align-items:center; flex-wrap:wrap;">
+          <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="guardarApunteEnVivo()">💾 Guardar apunte</button>
+          <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="abrirHistorialDesdeLlamada()">📊 Ver historia clínica</button>
+          <span id="apunteEstado" style="font-size:0.75rem; color:#00d26a;"></span>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
     let socket = null;
     let streamMedicoActivo = null;
-    let streamPacienteSimulado = null;
+    let streamPaciente = null;
+    let peerConnection = null;
+    let candidatosPendientes = [];
     let pacienteEnLlamadaActual = null;
+    let alertaActual = null;
+    let pacientesEnLinea = new Set();
+    let ultimasMetricas = {};
+    let trAvatar = null;
+    let streamAvatarPaciente = null;
+    let historialCedulaActual = null;
+    const ETIQUETAS_ESTADO = {
+      ESPERANDO: 'En espera',
+      PREPARANDO: 'Preparando',
+      TERAPIA: 'En curso',
+      PAUSADA: 'En pausa',
+      REPOSO: 'Finalizada',
+      ALERTA_MEDICA: 'SOS activo',
+      CERRADA: 'Sesión cerrada'
+    };
+    let configuracionIce = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    let iceCargado = false;
 
     window.addEventListener('DOMContentLoaded', () => {
       calcularEdadAutomatica();
@@ -343,28 +417,291 @@
       iniciarConexiónSocketMedico();
     });
 
+    /* Pide al servidor la lista de servidores STUN/TURN */
+    async function cargarConfiguracionIce() {
+      if (iceCargado) return;
+      try {
+        const r = await fetch('/api/ice', { cache: 'no-store' });
+        if (r.ok) {
+          const cfg = await r.json();
+          if (cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
+            configuracionIce = { iceServers: cfg.iceServers };
+            iceCargado = true;
+          }
+        }
+      } catch (err) {
+        console.warn('No se pudo leer /api/ice, se usa solo STUN:', err);
+      }
+    }
+
+    function mostrarEstadoPaciente(texto) {
+      const estado = document.getElementById('mEstadoLlamada');
+      if (estado) estado.innerText = texto;
+      const p = document.querySelector('#patientFeedPlaceholder p');
+      if (p) p.innerText = texto;
+      const ph = document.getElementById('patientFeedPlaceholder');
+      if (ph && !(streamPaciente && streamPaciente.getVideoTracks().length)) ph.style.display = 'flex';
+    }
+
     function iniciarConexiónSocketMedico() {
+      const estadoSrv = document.getElementById('serverConnectionStatus');
+
+      if (typeof io === 'undefined') {
+        estadoSrv.innerText = "SERVIDOR: NO DISPONIBLE (abre esta página desde la dirección del servidor Node)";
+        estadoSrv.style.color = "#ff4d4d";
+        return;
+      }
+
       socket = io();
 
       socket.on('connect', () => {
-        document.getElementById('serverConnectionStatus').innerText = "SERVIDOR: CONECTADO (SOCKET.IO ACTIVO)";
-        document.getElementById('serverConnectionStatus').style.color = "#00d26a";
+        estadoSrv.innerText = "SERVIDOR: CONECTADO (SOCKET.IO ACTIVO)";
+        estadoSrv.style.color = "#00d26a";
+        socket.emit('doctor:join');
       });
 
       socket.on('disconnect', () => {
-        document.getElementById('serverConnectionStatus').innerText = "SERVIDOR: DESCONECTADO";
-        document.getElementById('serverConnectionStatus').style.color = "#ff4d4d";
+        estadoSrv.innerText = "SERVIDOR: DESCONECTADO";
+        estadoSrv.style.color = "#ff4d4d";
       });
 
-      // Escuchar Alerta SOS del paciente en tiempo real
-      socket.on('doctor:emergency-alert', (alerta) => {
+      // Lista de pacientes ya conectados al entrar el médico
+      socket.on('server:patients-online', (lista) => {
+        pacientesEnLinea = new Set((lista || []).map(p => String(p.cedula)));
+        renderizarListaPacientes();
+      });
+
+      // Un paciente entra o sale
+      socket.on('server:patient-online', (d) => {
+        if (!d || !d.cedula) return;
+        if (d.conectado) pacientesEnLinea.add(String(d.cedula));
+        else pacientesEnLinea.delete(String(d.cedula));
+        renderizarListaPacientes();
+      });
+
+      // Alerta SOS del paciente
+      socket.on('patient:sos', (alerta) => {
+        alertaActual = alerta;
         mostrarNotificacionAlertaMedico(alerta);
       });
 
-      // Escuchar cuando el paciente completa una repetición o movimiento
-      socket.on('doctor:patient-movement', (data) => {
-        console.log("Movimiento recibido del paciente:", data);
+      // Movimiento y repeticiones en vivo
+      socket.on('patient:movement', (d) => {
+        if (!d || !d.cedula) return;
+        ultimasMetricas[String(d.cedula)] = d;
+        if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
       });
+
+      // Estado completo del paciente (1 vez por segundo)
+      socket.on('patient:state', (d) => {
+        if (!d || !d.cedula) return;
+        ultimasMetricas[String(d.cedula)] = d;
+        if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
+      });
+
+      socket.on('patient:repetition', (d) => {
+        console.log('Repetición recibida:', d);
+      });
+
+      socket.on('patient:session-completed', (d) => {
+        console.log('Sesión completada recibida:', d);
+        guardarSesionRecibida(d);
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          document.getElementById('mEstadoLlamada').innerText = 'Sesión completada por el paciente';
+        }
+      });
+
+      // ---- Señalización de la videollamada ----
+      socket.on('server:patient-offline', (d) => {
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          mostrarEstadoPaciente('El paciente no está conectado.');
+          pacienteEnLlamadaActual = null;
+        }
+      });
+
+      socket.on('server:patient-busy', (d) => {
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          mostrarEstadoPaciente('El paciente ya está en llamada con otro médico.');
+          pacienteEnLlamadaActual = null;
+        }
+      });
+
+      socket.on('patient:call-rejected', (d) => {
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          mostrarEstadoPaciente('El paciente rechazó la llamada.');
+          cerrarConexionWebRTC();
+          pacienteEnLlamadaActual = null;
+        }
+      });
+
+      socket.on('patient:call-accepted', (d) => {
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          iniciarOfertaHaciaPaciente();
+        }
+      });
+
+      socket.on('patient:answer', async (d) => {
+        if (!d || String(d.cedula) !== String(pacienteEnLlamadaActual)) return;
+        const pc = peerConnection;
+        if (!pc || pc.signalingState !== 'have-local-offer') return;
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(d.answer));
+          await vaciarCandidatosPendientes(pc);
+        } catch (err) {
+          console.error('Error al procesar la respuesta del paciente:', err);
+          mostrarEstadoPaciente('Error al procesar la respuesta del paciente.');
+        }
+      });
+
+      socket.on('patient:ice-candidate', async (d) => {
+        if (!d || !d.candidate || String(d.cedula) !== String(pacienteEnLlamadaActual)) return;
+        if (peerConnection && peerConnection.remoteDescription) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate));
+          } catch (err) {
+            console.warn('Candidato ICE descartado:', err);
+          }
+        } else {
+          candidatosPendientes.push(d.candidate);
+        }
+      });
+
+      socket.on('patient:hangup', (d) => {
+        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
+          cerrarConexionWebRTC();
+          mostrarEstadoPaciente('El paciente finalizó la llamada.');
+        }
+      });
+    }
+
+    function pintarMetricas(d) {
+      const a = (d && d.angles) || {};
+      document.getElementById('mHombro').innerText = a.shoulder || '--';
+      document.getElementById('mCodo').innerText = a.elbow || '--';
+      document.getElementById('mCadera').innerText = a.hip || '--';
+      document.getElementById('mRep').innerText = (d && d.repetitions != null) ? d.repetitions : 0;
+
+      if (!d) {
+        document.getElementById('mEstadoTerapia').innerText = '--';
+        document.getElementById('mResp').innerText = '--';
+        document.getElementById('mSpO2').innerText = '--';
+        document.getElementById('mTemp').innerText = '--';
+        return;
+      }
+
+      if (d.estado !== undefined) {
+        document.getElementById('mEstadoTerapia').innerText = ETIQUETAS_ESTADO[d.estado] || d.estado;
+      }
+      if (d.vitales) {
+        document.getElementById('mResp').innerText = d.vitales.respiracion || '--';
+        document.getElementById('mSpO2').innerText = d.vitales.saturacion || '--';
+        document.getElementById('mTemp').innerText = d.vitales.temperatura || '--';
+      }
+    }
+
+    function cerrarConexionWebRTC() {
+      if (peerConnection) {
+        peerConnection.ontrack = null;
+        peerConnection.onicecandidate = null;
+        peerConnection.onconnectionstatechange = null;
+        try { peerConnection.close(); } catch (e) {}
+        peerConnection = null;
+      }
+      candidatosPendientes = [];
+      streamPaciente = null;
+      streamAvatarPaciente = null;
+      trAvatar = null;
+      const v = document.getElementById('patientLiveFeedVideo');
+      if (v) v.srcObject = null;
+      const va = document.getElementById('patientAvatarVideo');
+      if (va) va.srcObject = null;
+      const pa = document.getElementById('avatarFeedPlaceholder');
+      if (pa) pa.style.display = 'flex';
+    }
+
+    async function vaciarCandidatosPendientes(pc) {
+      if (!pc || !pc.remoteDescription) return;
+      const lista = candidatosPendientes;
+      candidatosPendientes = [];
+      for (const c of lista) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch (err) {
+          console.warn('Candidato ICE descartado:', err);
+        }
+      }
+    }
+
+    /* El paciente aceptó: el médico crea la oferta WebRTC.
+       Si este equipo no tiene cámara o micrófono, participa en modo
+       "solo recibir": ve y escucha al paciente sin enviar nada. */
+    async function iniciarOfertaHaciaPaciente() {
+      const cedula = pacienteEnLlamadaActual;
+      if (!cedula) return;
+
+      try {
+        await cargarConfiguracionIce();
+        cerrarConexionWebRTC();
+
+        const pc = new RTCPeerConnection(configuracionIce);
+        peerConnection = pc;
+
+        if (streamMedicoActivo) {
+          streamMedicoActivo.getTracks().forEach(t => pc.addTrack(t, streamMedicoActivo));
+        }
+
+        ['video', 'audio'].forEach((tipo) => {
+          const yaEnvia = pc.getSenders().some(s => s.track && s.track.kind === tipo);
+          if (!yaEnvia) pc.addTransceiver(tipo, { direction: 'recvonly' });
+        });
+
+        // Último video recibido: el avatar 3D que ve el paciente
+        trAvatar = pc.addTransceiver('video', { direction: 'recvonly' });
+
+        pc.ontrack = (event) => {
+          if (trAvatar && event.transceiver === trAvatar) {
+            if (!streamAvatarPaciente) streamAvatarPaciente = new MediaStream();
+            streamAvatarPaciente.addTrack(event.track);
+            const va = document.getElementById('patientAvatarVideo');
+            if (va.srcObject !== streamAvatarPaciente) va.srcObject = streamAvatarPaciente;
+            va.play().catch(() => {});
+            document.getElementById('avatarFeedPlaceholder').style.display = 'none';
+            return;
+          }
+          if (!streamPaciente) streamPaciente = new MediaStream();
+          streamPaciente.addTrack(event.track);
+          const v = document.getElementById('patientLiveFeedVideo');
+          if (v.srcObject !== streamPaciente) v.srcObject = streamPaciente;
+          v.play().catch(() => {});
+          if (event.track.kind === 'video') {
+            document.getElementById('patientFeedPlaceholder').style.display = 'none';
+          }
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && socket && socket.connected) {
+            socket.emit('doctor:ice-candidate', { cedula: cedula, candidate: event.candidate });
+          }
+        };
+
+        pc.onconnectionstatechange = () => {
+          if (peerConnection !== pc) return;
+          const s = pc.connectionState;
+          if (s === 'connected') document.getElementById('mEstadoLlamada').innerText = 'Videollamada conectada';
+          else if (s === 'connecting') document.getElementById('mEstadoLlamada').innerText = 'Conectando video...';
+          else if (s === 'disconnected') document.getElementById('mEstadoLlamada').innerText = 'Conexión inestable...';
+          else if (s === 'failed') mostrarEstadoPaciente('Falló la conexión de video. Entre redes distintas puede hacer falta un servidor TURN.');
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit('doctor:offer', { cedula: cedula, offer: pc.localDescription });
+        document.getElementById('mEstadoLlamada').innerText = 'Oferta enviada, esperando al paciente...';
+      } catch (err) {
+        console.error('Error al crear la oferta:', err);
+        mostrarEstadoPaciente('Error al iniciar la videollamada: ' + err.message);
+      }
     }
 
     function mostrarNotificacionAlertaMedico(alerta) {
@@ -380,7 +717,11 @@
 
     function unirMedicoAUrgencia() {
       cerrarBannerAlertaMedico();
-      abrirEntradaTerapiaEnVivo("1045238910");
+      if (!alertaActual || !alertaActual.cedula) return;
+      if (socket && socket.connected) {
+        socket.emit('doctor:alert-acknowledged', { cedula: alertaActual.cedula });
+      }
+      abrirEntradaTerapiaEnVivo(String(alertaActual.cedula));
     }
 
     function actualizarModeloTerapia() {
@@ -465,7 +806,8 @@
           rutinaId: document.getElementById('rxRutina').value,
           modelo3D: actualizarModeloTerapia()
         },
-        sesionesHistorial: sesionesPrevias
+        sesionesHistorial: sesionesPrevias,
+        apuntesMedico: existingIndex >= 0 ? (lista[existingIndex].apuntesMedico || []) : []
       };
 
       if (existingIndex >= 0) lista[existingIndex] = fichaPaciente;
@@ -498,7 +840,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><span class="cred-badge">${p.documento}</span></td>
-          <td>${p.nombres} ${p.apellidos}</td>
+          <td>${pacientesEnLinea.has(String(p.documento)) ? '<span style="color:#00d26a;" title="Conectado ahora">● </span>' : ''}${p.nombres} ${p.apellidos}</td>
           <td>${a.patologia} (${a.lado})</td>
           <td>${prog.fechaInicio} al ${prog.fechaFin}</td>
           <td><span style="font-family:monospace; color:#00d26a;">${prog.modelo3D || 'terapia.1.fbx'}</span></td>
@@ -510,11 +852,210 @@
       });
     }
 
+    function enviarComandoTerapia(comando) {
+      if (!socket || !socket.connected || !pacienteEnLlamadaActual) {
+        alert('No hay conexión activa con un paciente.');
+        return;
+      }
+      socket.emit('doctor:command', { cedula: pacienteEnLlamadaActual, command: comando });
+      document.getElementById('mEstadoLlamada').innerText = 'Comando enviado: ' + comando;
+    }
+
+    function limpiarFormulario() {
+      ['patNombre', 'patApellido', 'patDoc', 'patNacimiento', 'patEva', 'patNota'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('edadCalculadaDisplay').innerText = '';
+    }
+
+    /* Guarda en el portal médico la sesión que el paciente termina
+       (solo si este portal está abierto en ese momento) */
+    function guardarSesionRecibida(d) {
+      if (!d || !d.cedula) return;
+      const lista = obtenerBasePacientes();
+      const i = lista.findIndex(p => String(p.paciente.documento) === String(d.cedula));
+      if (i < 0) return;
+      if (!Array.isArray(lista[i].sesionesHistorial)) lista[i].sesionesHistorial = [];
+      if (lista[i].sesionesHistorial.some(s => s.fecha === d.fecha)) return;
+      lista[i].sesionesHistorial.push(d);
+      guardarBasePacientes(lista);
+    }
+
+    function agregarApunteMedico(cedula, texto) {
+      texto = (texto || '').trim();
+      if (!texto) return false;
+      const lista = obtenerBasePacientes();
+      const i = lista.findIndex(p => String(p.paciente.documento) === String(cedula));
+      if (i < 0) return false;
+      if (!Array.isArray(lista[i].apuntesMedico)) lista[i].apuntesMedico = [];
+      lista[i].apuntesMedico.push({ fecha: new Date().toISOString(), texto: texto });
+      guardarBasePacientes(lista);
+      return true;
+    }
+
+    function guardarApunteEnVivo() {
+      const caja = document.getElementById('apunteEnVivo');
+      const estado = document.getElementById('apunteEstado');
+      if (!pacienteEnLlamadaActual) { estado.innerText = 'No hay paciente seleccionado.'; return; }
+      if (agregarApunteMedico(pacienteEnLlamadaActual, caja.value)) {
+        caja.value = '';
+        estado.innerText = '✓ Apunte guardado';
+      } else {
+        estado.innerText = 'Escribe un apunte primero.';
+      }
+      setTimeout(() => { estado.innerText = ''; }, 2500);
+    }
+
+    function abrirHistorialDesdeLlamada() {
+      if (pacienteEnLlamadaActual) abrirModalHistorialDiagnostico(pacienteEnLlamadaActual);
+    }
+
+    function guardarApunteHistorial() {
+      const caja = document.getElementById('apunteHistorial');
+      const estado = document.getElementById('apunteHistorialEstado');
+      if (agregarApunteMedico(historialCedulaActual, caja.value)) {
+        caja.value = '';
+        estado.innerText = '✓ Apunte guardado';
+        const f = obtenerBasePacientes().find(p => String(p.paciente.documento) === String(historialCedulaActual));
+        if (f) renderApuntes(f);
+      } else {
+        estado.innerText = 'Escribe un apunte primero.';
+      }
+      setTimeout(() => { estado.innerText = ''; }, 2500);
+    }
+
+    function crearCeldaHistoria(etiqueta, valor) {
+      const d = document.createElement('div');
+      const l = document.createElement('div');
+      l.style.cssText = 'font-size:0.7rem; color:#a0a0c0; text-transform:uppercase;';
+      l.textContent = etiqueta;
+      const v = document.createElement('div');
+      v.style.cssText = 'color:#fff;';
+      v.textContent = (valor === undefined || valor === null || valor === '') ? '—' : valor;
+      d.appendChild(l);
+      d.appendChild(v);
+      return d;
+    }
+
+    function renderHistoriaClinica(f) {
+      const g = document.getElementById('historiaClinicaGrid');
+      g.innerHTML = '';
+      const p = f.paciente || {};
+      const a = f.anamnesis || {};
+      const r = f.programacionMensual || {};
+      const celdas = [
+        ['Nombre', `${p.nombres || ''} ${p.apellidos || ''}`.trim()],
+        ['Documento', p.documento],
+        ['Fecha de nacimiento', p.fechaNacimiento],
+        ['Edad', p.edadCalculada != null ? p.edadCalculada + ' años' : ''],
+        ['Género', p.genero],
+        ['Dolor basal (EVA 0-10)', p.dolorEva],
+        ['Patología', a.patologia],
+        ['Lado afectado', a.lado],
+        ['Articulación', a.articulacion],
+        ['Programación', r.fechaInicio ? `${r.fechaInicio} al ${r.fechaFin}` : ''],
+        ['Rutina', r.rutinaId],
+        ['Modelo 3D', r.modelo3D]
+      ];
+      celdas.forEach(c => g.appendChild(crearCeldaHistoria(c[0], c[1])));
+      const nota = crearCeldaHistoria('Nota clínica inicial', a.nota);
+      nota.style.gridColumn = '1 / -1';
+      nota.lastChild.style.whiteSpace = 'pre-wrap';
+      g.appendChild(nota);
+    }
+
+    function renderSesiones(f) {
+      const sesiones = (f.sesionesHistorial || []).slice().sort((x, y) => String(x.fecha).localeCompare(String(y.fecha)));
+      const totalReps = sesiones.reduce((s, x) => s + (Number(x.repeticiones) || 0), 0);
+
+      document.getElementById('kpiTotalSesiones').innerText = sesiones.length;
+      document.getElementById('kpiMinutosTotales').innerText = totalReps;
+      document.getElementById('kpiPrecisionGlobal').innerText = '—';
+      document.getElementById('kpiRatioEjecucion').innerText = '—';
+
+      const evol = document.getElementById('diagnosticoEvolucionRom');
+      if (sesiones.length === 0) {
+        evol.innerText = 'Aún no hay sesiones registradas en este portal.';
+      } else if (sesiones.length === 1) {
+        evol.innerText = `Una sesión registrada: ${sesiones[0].repeticiones} repeticiones (día ${sesiones[0].dia}).`;
+      } else {
+        const primera = sesiones[0].repeticiones;
+        const ultima = sesiones[sesiones.length - 1].repeticiones;
+        const promedio = (totalReps / sesiones.length).toFixed(1);
+        evol.innerText = `Primera sesión: ${primera} repeticiones. Última: ${ultima}. Promedio: ${promedio} por sesión.`;
+      }
+
+      document.getElementById('diagnosticoTecnicaIa').innerText =
+        'La evaluación automática de la técnica todavía no está disponible. Usa el seguimiento en vivo y tus apuntes.';
+
+      const tbody = document.getElementById('tablaSesionesDetalle');
+      tbody.innerHTML = '';
+      if (sesiones.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.style.cssText = 'text-align:center; color:#a0a0c0; padding:14px;';
+        td.textContent = 'Sin sesiones registradas todavía.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      sesiones.forEach((s, idx) => {
+        const tr = document.createElement('tr');
+        const fecha = s.fecha ? new Date(s.fecha).toLocaleString('es-CO') : '—';
+        const valores = [
+          `Sesión ${idx + 1} — ${fecha} (día ${s.dia != null ? s.dia : '—'})`,
+          (f.programacionMensual && f.programacionMensual.rutinaId) || '—',
+          '—',
+          '—',
+          `${s.repeticiones != null ? s.repeticiones : 0} repeticiones`,
+          '—'
+        ];
+        valores.forEach((v) => {
+          const td = document.createElement('td');
+          td.textContent = v;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderApuntes(f) {
+      const cont = document.getElementById('listaApuntes');
+      cont.innerHTML = '';
+      const apuntes = (f.apuntesMedico || []).slice().reverse();
+      if (apuntes.length === 0) {
+        const p = document.createElement('div');
+        p.style.color = '#a0a0c0';
+        p.textContent = 'Aún no hay apuntes.';
+        cont.appendChild(p);
+        return;
+      }
+      apuntes.forEach((a) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'border-bottom:1px solid #303050; padding:6px 0;';
+        const fecha = document.createElement('div');
+        fecha.style.cssText = 'font-size:0.7rem; color:#a0a0c0;';
+        fecha.textContent = new Date(a.fecha).toLocaleString('es-CO');
+        const texto = document.createElement('div');
+        texto.style.whiteSpace = 'pre-wrap';
+        texto.textContent = a.texto;
+        item.appendChild(fecha);
+        item.appendChild(texto);
+        cont.appendChild(item);
+      });
+    }
+
     function abrirModalHistorialDiagnostico(cedula) {
       const lista = obtenerBasePacientes();
-      const found = lista.find(p => p.paciente.documento === cedula);
+      const found = lista.find(p => String(p.paciente.documento) === String(cedula));
       if (!found) return;
+      historialCedulaActual = String(cedula);
       document.getElementById('historialModalTitle').innerText = `Historial — ${found.paciente.nombres} ${found.paciente.apellidos}`;
+      renderHistoriaClinica(found);
+      renderSesiones(found);
+      renderApuntes(found);
       document.getElementById('historialClinicoModal').style.display = 'flex';
     }
 
@@ -522,37 +1063,139 @@
       document.getElementById('historialClinicoModal').style.display = 'none';
     }
 
-    async function abrirEntradaTerapiaEnVivo(cedula) {
-      document.getElementById('liveCallModal').style.display = 'flex';
+    /* Obtiene cámara y micrófono del médico. Si este equipo no tiene
+       cámara, intenta solo micrófono; si tampoco, queda en modo solo-recibir. */
+    async function prepararMediosMedico() {
+      if (streamMedicoActivo) return;
+
+      const docVid = document.getElementById('doctorLiveVideo');
+      const docOverlay = document.getElementById('doctorCallOverlay');
+      const btnToggle = document.getElementById('btnToggleMedicoCam');
+
+      let stream = null;
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const intentos = [
+          { video: true, audio: true },
+          { video: false, audio: true },
+          { video: true, audio: false }
+        ];
+        for (const c of intentos) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia(c);
+            break;
+          } catch (err) {
+            console.warn('Medios del médico no disponibles con', JSON.stringify(c), err.name);
+          }
+        }
+      }
+
+      streamMedicoActivo = stream;
+
+      if (stream && stream.getVideoTracks().length) {
+        docVid.srcObject = stream;
+        docVid.style.display = 'block';
+        docOverlay.style.display = 'none';
+        btnToggle.innerText = '🔇 Apagar Cámara Médico';
+      } else {
+        docVid.style.display = 'none';
+        docOverlay.style.display = 'block';
+        docOverlay.innerHTML = '<p>Este equipo no tiene cámara disponible.<br>Verás y escucharás al paciente' +
+          (stream ? ' y él te escuchará a ti.' : ' sin enviar audio ni video.') + '</p>';
+      }
     }
 
+    function colgarLlamadaActual() {
+      if (socket && socket.connected && pacienteEnLlamadaActual) {
+        socket.emit('doctor:hangup', { cedula: pacienteEnLlamadaActual });
+      }
+      cerrarConexionWebRTC();
+    }
+
+    async function abrirEntradaTerapiaEnVivo(cedula) {
+      cedula = String(cedula);
+
+      if (!socket || !socket.connected) {
+        alert('Sin conexión con el servidor.\n\nDirección actual de esta página: ' + location.origin + '\nDebe ser http://localhost:3000 (con el servidor encendido con npm start).');
+        return;
+      }
+
+      // Ya hay una llamada en curso con este mismo paciente: solo mostrar la ventana
+      if (peerConnection && pacienteEnLlamadaActual === cedula) {
+        document.getElementById('liveCallModal').style.display = 'flex';
+        return;
+      }
+
+      if (pacienteEnLlamadaActual && pacienteEnLlamadaActual !== cedula) {
+        colgarLlamadaActual();
+      }
+
+      pacienteEnLlamadaActual = cedula;
+
+      const ficha = obtenerBasePacientes().find(p => String(p.paciente.documento) === cedula);
+      let nombre = 'Paciente';
+      if (ficha) nombre = `${ficha.paciente.nombres} ${ficha.paciente.apellidos}`;
+      else if (alertaActual && String(alertaActual.cedula) === cedula && alertaActual.nombre) nombre = alertaActual.nombre;
+
+      document.getElementById('callPatientTitle').innerText = `Paciente: ${nombre} (${cedula})`;
+      document.getElementById('liveCallModal').style.display = 'flex';
+
+      pintarMetricas(ultimasMetricas[cedula] || null);
+      mostrarEstadoPaciente('Preparando equipo médico...');
+      await prepararMediosMedico();
+
+      if (pacienteEnLlamadaActual !== cedula) return; // se cerró mientras tanto
+
+      mostrarEstadoPaciente('Llamando al paciente... debe aceptar en la pantalla del paciente.');
+      socket.emit('doctor:call-request', { cedula: cedula });
+    }
+
+    /* Activa / oculta la cámara del médico sin cortar la llamada */
     async function alternarVistaMedicoEnVivo() {
       const docVid = document.getElementById('doctorLiveVideo');
       const docOverlay = document.getElementById('doctorCallOverlay');
       const btnToggle = document.getElementById('btnToggleMedicoCam');
 
-      if (!streamMedicoActivo) {
-        try {
-          streamMedicoActivo = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-          docVid.srcObject = streamMedicoActivo;
-          docVid.style.display = 'block';
-          docOverlay.style.display = 'none';
-          btnToggle.innerText = '🔇 Apagar Cámara Médico';
-        } catch (err) {
-          alert("Error de cámara: " + err.message);
-        }
+      const pista = streamMedicoActivo ? streamMedicoActivo.getVideoTracks()[0] : null;
+
+      if (!pista) {
+        alert('Este equipo no tiene cámara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
+        return;
+      }
+
+      pista.enabled = !pista.enabled;
+
+      if (pista.enabled) {
+        docVid.style.display = 'block';
+        docOverlay.style.display = 'none';
+        btnToggle.innerText = '🔇 Apagar Cámara Médico';
       } else {
-        streamMedicoActivo.getTracks().forEach(t => t.stop());
-        streamMedicoActivo = null;
-        docVid.srcObject = null;
         docVid.style.display = 'none';
         docOverlay.style.display = 'block';
+        docOverlay.innerHTML = '<p>Cámara médica apagada.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
         btnToggle.innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
       }
     }
 
     function cerrarSesionEnVivo() {
-      if (streamMedicoActivo) { streamMedicoActivo.getTracks().forEach(t => t.stop()); streamMedicoActivo = null; }
+      colgarLlamadaActual();
+
+      if (streamMedicoActivo) {
+        streamMedicoActivo.getTracks().forEach(t => t.stop());
+        streamMedicoActivo = null;
+      }
+
+      const docVid = document.getElementById('doctorLiveVideo');
+      docVid.srcObject = null;
+      docVid.style.display = 'none';
+
+      const docOverlay = document.getElementById('doctorCallOverlay');
+      docOverlay.style.display = 'block';
+      docOverlay.innerHTML = '<p>Cámara médica inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
+      document.getElementById('btnToggleMedicoCam').innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
+
+      pacienteEnLlamadaActual = null;
+      mostrarEstadoPaciente('Esperando flujo del paciente...');
+      document.getElementById('mEstadoLlamada').innerText = 'Sin llamada';
       document.getElementById('liveCallModal').style.display = 'none';
     }
 
