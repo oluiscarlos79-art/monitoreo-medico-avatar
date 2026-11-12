@@ -1,1451 +1,2651 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Portal Médico — UAC Tele-Rehabilitación (Historial, KPIs y Diagnóstico IA)</title>
-  <!-- Socket.IO -->
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; background-color: #0b0b14; color: #fff; min-height: 100vh; padding: 20px; display: flex; justify-content: center; align-items: flex-start; }
-    
-    #loginContainer { width: 100%; max-width: 400px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); margin-top: 10vh; }
-    #medicoPanel { display: none; width: 100%; max-width: 1200px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); }
-    
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
-    .panel-header img { height: 50px; width: auto; object-fit: contain; }
-    
-    #emergencyAlertBanner {
-      display: none;
-      background: rgba(255, 77, 77, 0.18);
-      border: 1.5px solid #ff4d4d;
-      border-radius: 8px;
-      padding: 14px 18px;
-      margin-bottom: 20px;
-      animation: pulseAlert 1.2s infinite alternate;
-    }
-    #emergencyAlertBanner.active { display: flex; justify-content: space-between; align-items: center; }
-    @keyframes pulseAlert {
-      from { border-color: rgba(255,77,77,0.4); box-shadow: 0 0 5px rgba(255,77,77,0.2); }
-      to { border-color: #ff4d4d; box-shadow: 0 0 18px rgba(255,77,77,0.5); }
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal y Visor 3D — UAC Tele-Rehabilitación</title>
 
-    h1, h2, h3 { color: #00d26a; }
-    h2 { font-size: 1.2rem; }
-    h3 { font-size: 0.9rem; margin-bottom: 10px; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; }
-    
-    .form-group { margin-bottom: 12px; }
-    label { display: block; font-size: 0.8rem; color: #a0a0c0; margin-bottom: 4px; }
-    input, select, textarea { width: 100%; padding: 8px 10px; background: #1a1a2e; border: 1px solid #303050; color: #fff; border-radius: 6px; font-size: 0.85rem; }
-    textarea { resize: vertical; }
-    
-    button { background-color: #00d26a; color: #0f0f1b; border: none; padding: 10px 16px; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
-    button:hover { background-color: #00b359; }
-    .btn-secondary { background: #303050; color: #fff; }
-    .btn-secondary:hover { background: #404070; }
-    .btn-danger { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; border: 1px solid #ff4d4d; }
-    .btn-call { background: rgba(0, 210, 106, 0.2); color: #00d26a; border: 1px solid #00d26a; }
-    .btn-call:hover { background: rgba(0, 210, 106, 0.35); }
-    .btn-info { background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid #3498db; }
-    
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    
-    .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; background: rgba(0,210,106,0.2); color: #00d26a; }
-    .auth-banner { margin-top: 15px; padding: 12px; border-radius: 6px; text-align: center; font-weight: bold; font-size: 0.9rem; display: none; }
-    .auth-active { background: rgba(0,210,106,0.15); color: #00d26a; border: 1px solid #00d26a; }
+<!-- Dependencias 3D -->
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-    .tabs-nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #303050; padding-bottom: 10px; flex-wrap: wrap; }
-    .tab-btn { background: transparent; color: #a0a0c0; border: 1px solid transparent; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    .tab-btn.active { background: rgba(0,210,106,0.15); color: #00d26a; border-color: #00d26a; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
-    .patients-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
-    .patients-table th, .patients-table td { padding: 10px; text-align: left; border-bottom: 1px solid #202035; }
-    .patients-table th { color: #a0a0c0; font-size: 0.75rem; text-transform: uppercase; }
-    .cred-badge { font-family: monospace; background: rgba(0,210,106,0.1); color: #00d26a; padding: 3px 6px; border-radius: 4px; }
-    .calc-edad { font-size: 0.75rem; color: #00d26a; margin-top: 3px; display: block; }
+<!-- Socket.IO -->
+<script src="/socket.io/socket.io.js"></script>
 
-    #historialClinicoModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.94); z-index: 1200; padding: 25px; overflow-y: auto; justify-content: center; align-items: flex-start; }
-    .history-container { width: 100%; max-width: 1050px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 25px; margin: auto; }
-    
-    .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
-    .kpi-card { background: #1a1a2e; border: 1px solid #303050; border-radius: 8px; padding: 14px; text-align: center; }
-    .kpi-card .val { font-size: 1.5rem; font-weight: bold; color: #00d26a; margin-top: 4px; font-family: monospace; }
-    .kpi-card .lbl { font-size: 0.75rem; color: #a0a0c0; text-transform: uppercase; }
+<!-- MQTT (signos vitales desde el ESP32) -->
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
 
-    .score-badge-good { color: #2ecc71; font-weight: bold; }
-    .score-badge-fair { color: #f39c12; font-weight: bold; }
-    .score-badge-bad { color: #e74c3c; font-weight: bold; }
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#1a1a2e;color:white;min-height:100vh;overflow-x:hidden}
 
-    #liveCallModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.92); z-index: 1000; padding: 25px; flex-direction: column; align-items: center; justify-content: center; }
-    .call-container { width: 100%; max-width: 900px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-    .call-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; min-height: 380px; }
-    .call-box { background: #0b0b14; border: 1px solid #303050; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; padding: 10px; text-align: center; }
-    .call-box video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
-    .mode-tag { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); color: #00d26a; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; z-index: 5; border: 1px solid rgba(0,210,106,0.3); }
-  </style>
-  <style>
-    #callStagesGrid { grid-template-columns: 2.4fr 1fr; grid-template-rows: 1fr 1fr; min-height: 470px; }
-    #callStagesGrid > .call-box:nth-child(1) { grid-column: 2; grid-row: 1; }
-    #callStagesGrid > .call-box:nth-child(2) { grid-column: 1; grid-row: 1 / span 2; }
-    #callStagesGrid > .call-box:nth-child(3) { grid-column: 2; grid-row: 2; }
-  </style>
+#patientLoginSection{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+#patientLogin{width:100%;max-width:420px;background:#141422;padding:35px;border-radius:12px;border:1px solid rgba(0,210,106,.3)}
+.form-group{margin-bottom:14px}
+label{display:block;font-size:.78rem;color:#a0a0c0;margin-bottom:4px}
+input{width:100%;padding:10px;background:#1a1a2e;border:1px solid #303050;color:white;border-radius:6px;font-size:.9rem}
+button{cursor:pointer}
+button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weight:bold;border-radius:6px;width:100%}
+.error-msg{color:#ff4d4d;font-size:.78rem;margin-top:8px;display:none;text-align:center}
+
+#patientAppContainer{width:100vw;height:100vh;overflow:hidden;display:none;position:relative}
+.left-panel{width:50%;height:100vh;position:relative;background:#141422;border-right:2px solid rgba(0,210,106,.3);display:flex;flex-direction:column}
+.avatar-container{width:100%;flex:1;min-height:0;position:relative}
+#avatarCanvas{width:100%;height:100%;display:block}
+.right-panel{width:50%;height:100vh;position:relative;background:#0f0f1b;display:flex;flex-direction:column;overflow-y:auto}
+.right-panel video{width:100%;height:75vh;object-fit:cover;transform:scaleX(-1);border-bottom:2px solid rgba(0,210,106,.3);flex-shrink:0;background:#080810}
+.right-content{padding:8px 12px;flex:1;display:flex;flex-direction:column;gap:6px}
+
+.telemetry-panel{position:absolute;top:15px;left:15px;background:rgba(15,15,27,.9);padding:8px 12px;border-radius:8px;z-index:10;min-width:205px;border:1px solid rgba(0,210,106,.2)}
+.telemetry-title{font-size:.75rem;font-weight:bold;margin-bottom:4px;color:#00d26a;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:2px}
+.telemetry-item{display:flex;justify-content:space-between;margin-bottom:3px;font-size:.75rem;gap:8px}
+.telemetry-label{color:#a0a0c0}
+.telemetry-value{font-weight:bold;color:white}
+
+.precision-panel{position:absolute;bottom:15px;left:15px;background:rgba(15,15,27,.9);padding:8px 14px;border-radius:8px;border-left:4px solid #00d26a;z-index:10;max-width:300px}
+.precision-title{font-size:.7rem;color:#a0a0c0;text-transform:uppercase}
+.precision-value{font-size:1.4rem;font-weight:bold;color:#00d26a}
+.feedback-text{font-size:.72rem;color:#e0e0e0;margin-top:3px}
+.btn-manual-start{background:#00d26a;color:#0f0f1b;border:0;padding:6px 10px;font-size:.72rem;font-weight:bold;border-radius:5px;margin-top:5px}
+
+.uac-logo-container{position:absolute;top:12px;right:15px;z-index:20;background:rgba(15,15,27,.88);padding:6px 12px;border-radius:10px;display:flex;align-items:center;border:1px solid rgba(0,210,106,.4)}
+.uac-logo-container img{height:46px;width:auto;object-fit:contain}
+
+/* Indicador visual de Actualización 1.1 */
+.update-badge{position:absolute;top:12px;left:15px;z-index:20;background:rgba(0,210,106,0.2);color:#00d26a;padding:6px 12px;border-radius:8px;font-size:.75rem;font-weight:bold;border:1px solid rgba(0,210,106,.4)}
+
+.card{background:#141422;padding:6px 10px;border-radius:6px;border:1px solid #303050}
+.card h3{font-size:.72rem;color:#00d26a;text-transform:uppercase;margin-bottom:3px}
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:.7rem}
+.info-label{color:#a0a0c0;font-size:.6rem;text-transform:uppercase}
+.info-value{font-weight:bold;color:white}
+
+.days-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:4px;max-height:150px;overflow-y:auto;padding-right:2px}
+.day-card{background:#1a1a2e;border:1px solid #303050;padding:4px;border-radius:5px;text-align:center;cursor:not-allowed;opacity:.5}
+.day-card.unlocked{opacity:1;cursor:pointer}
+.day-state{font-size:.58rem;color:#a0a0c0;margin-top:2px}
+body.espejo *{pointer-events:none!important}
+body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,body.espejo #avisoMedico,body.espejo #doctorEmergencyPanel,body.espejo #connectionStatus,body.espejo #callStatus,body.espejo #mqttStatus{display:none!important}
+.day-card.unlocked:hover{border-color:#00d26a;background:rgba(0,210,106,.05)}
+.day-card.active{border-color:#00d26a;background:rgba(0,210,106,.18);opacity:1}
+.day-num{font-weight:bold;color:#00d26a;font-size:.68rem}
+.day-date{font-size:.58rem;color:#a0a0c0;margin-top:1px}
+
+.ai-speech-bubble{background:rgba(15,15,27,.9);border:1px solid #00d26a;padding:5px 8px;border-radius:8px}
+.ai-speech-header{font-size:.62rem;color:#00d26a;font-weight:bold;margin-bottom:1px;text-transform:uppercase}
+.ai-speech-text{font-size:.73rem;color:white;line-height:1.3}
+
+#loadingOverlay{position:absolute;inset:0;background:rgba(20,20,34,.92);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:50;transition:opacity .5s}
+.spinner{width:35px;height:35px;border:3px solid rgba(0,210,106,.2);border-top:3px solid #00d26a;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#doctorEmergencyPanel{display:none;position:absolute;top:15px;right:15px;width:320px;max-height:420px;background:#0f0f1b;z-index:35;flex-direction:column;border:1px solid #ff4d4d;border-radius:8px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.5)}
+#doctorEmergencyPanel.active{display:flex}
+.doctor-video-header{background:rgba(255,77,77,.25);color:#ff4d4d;border-bottom:1px solid #ff4d4d;font-size:.72rem;padding:8px 10px;font-weight:bold;display:flex;flex-direction:column;gap:4px}
+#doctorRemoteVideo{width:100%;height:180px;object-fit:cover;background:#000}
+
+.action-row{display:flex;gap:8px;margin-top:auto}
+.action-btn{padding:7px;font-size:.72rem;font-weight:bold;border-radius:5px;flex:1}
+.sos-btn{background:rgba(255,77,77,.2);color:#ff4d4d;border:1px solid #ff4d4d}
+.exit-btn{background:transparent;color:#ff6b6b;border:1px solid #ff6b6b}
+.call-btn{background:#00d26a;color:#101020;border:0}
+.hang-btn{background:#ff4d4d;color:white;border:0;display:none}
+
+#poseCanvas{position:absolute;inset:0;width:100%;height:75vh;pointer-events:none;transform:scaleX(-1);z-index:15;}
+#connectionStatus{font-size:.65rem;color:#ffd166;margin-top:3px}
+#callStatus{font-size:.7rem;color:#00d26a;margin-top:3px}
+
+@media(max-width:750px){
+ #patientAppContainer{height:auto;min-height:100vh;overflow:visible;flex-direction:column}
+ .left-panel,.right-panel{width:100%;height:75vh}
+ .right-panel{height:auto;min-height:70vh}
+ .avatar-container{min-height:450px}
+ .right-panel video{height:55vh}
+ #poseCanvas{height:55vh}
+}
+</style>
 </head>
+
 <body>
 
-  <!-- LOGIN MÉDICO -->
-  <div id="loginContainer">
-    <div style="text-align: center; margin-bottom: 20px;">
-      <img src="./escudo_uac.png" alt="Escudo UAC" style="height: 60px; object-fit: contain; margin-bottom: 10px;">
-      <h1>Acceso Médico UAC</h1>
-    </div>
-    <p style="font-size: 0.85rem; color: #a0a0c0; margin-bottom: 20px; text-align: center;">Credencial clínica de acceso</p>
-    <div class="form-group">
-      <label>Usuario</label>
-      <input type="text" id="medUser" value="Luis.ortega8" placeholder="Luis.ortega8">
-    </div>
-    <div class="form-group">
-      <label>Contraseña</label>
-      <input type="password" id="medPin" value="123456789" placeholder="•••••••••">
-    </div>
-    <button onclick="loginMedico()" style="width: 100%; margin-top: 10px;">Ingresar al Panel</button>
-    <p id="loginError" style="color: #ff4d4d; font-size: 0.8rem; margin-top: 10px; display: none; text-align: center;">Credenciales inválidas.</p>
+<div id="patientLoginSection">
+ <div id="patientLogin">
+  <div style="text-align:center;margin-bottom:18px">
+   <img src="./escudo_uac.png" alt="Escudo UAC" style="height:75px;object-fit:contain;margin-bottom:10px">
+   <h1 style="font-size:1.5rem">Acceso Paciente UAC</h1>
   </div>
 
-  <!-- PANEL CLÍNICO GENERAL -->
-  <div id="medicoPanel">
-    <div id="emergencyAlertBanner">
-      <div>
-        <span style="color:#ff4d4d; font-weight:bold; font-size:0.85rem;">🚨 URGENCIA / AYUDA MÉDICA SOLICITADA</span>
-        <p id="emergencyAlertText" style="font-size:0.8rem; color:#fff; margin-top:3px;">Paciente solicita asistencia clínica en vivo.</p>
-      </div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn-danger" style="padding:8px 14px;" onclick="unirMedicoAUrgencia()">🟢 Entrar a Terapia / Intervenir</button>
-        <button class="btn-secondary" style="padding:8px 12px;" onclick="cerrarBannerAlertaMedico()">Descartar / Silenciar</button>
-      </div>
-    </div>
+  <p style="font-size:.82rem;color:#a0a0c0;margin-bottom:18px;text-align:center;line-height:1.4">
+   Bienvenido a tu espacio de recuperación UAC. Digita tu documento para iniciar.
+  </p>
 
-    <div class="panel-header">
-      <div>
-        <span class="status-badge" id="serverConnectionStatus">SERVIDOR: CONECTando...</span>
-        <h2 style="margin-top: 8px;">Control de Historias Clínicas, Métricas y Desempeño por Sesión</h2>
-      </div>
-      <img src="./escudo_uac.png" alt="Escudo UAC">
-    </div>
-
-    <div class="tabs-nav">
-      <button class="tab-btn active" onclick="cambiarPestaña('tab-formulario', this)">➕ Nueva / Editar Ficha Paciente</button>
-      <button class="tab-btn" onclick="cambiarPestaña('tab-lista', this); renderizarListaPacientes();">📋 Pacientes en Terapia (<span id="contadorPacientes">0</span>)</button>
-    </div>
-
-    <!-- PESTAÑA 1: FORMULARIO -->
-    <div id="tab-formulario" class="tab-content active">
-      <h3>1. Datos de Identificación (Cédula = Credencial de Paciente)</h3>
-      <div class="grid-3">
-        <div class="form-group"><label>Nombres</label><input type="text" id="patNombre" value="Carlos Eduardo"></div>
-        <div class="form-group"><label>Apellidos</label><input type="text" id="patApellido" value="Martínez Pérez"></div>
-        <div class="form-group"><label>Cédula / ID (Acceso Paciente)</label><input type="text" id="patDoc" value="1045238910"></div>
-      </div>
-      <div class="grid-3">
-        <div class="form-group">
-          <label>Fecha de Nacimiento</label>
-          <input type="date" id="patNacimiento" value="1992-05-14" onchange="calcularEdadAutomatica()">
-          <span id="edadCalculadaDisplay" class="calc-edad">Edad calculada: 34 años</span>
-        </div>
-        <div class="form-group">
-          <label>Género</label>
-          <select id="patGenero">
-            <option value="Masculino">Masculino</option>
-            <option value="Femenino">Femenino</option>
-            <option value="Otro">Otro</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Nivel de Dolor Basal (EVA 0-10)</label>
-          <input type="number" id="patEva" min="0" max="10" value="3">
-        </div>
-      </div>
-
-      <h3 style="margin-top: 15px;">2. Anamnesis y Segmento Comprometido</h3>
-      <div class="grid-3">
-        <div class="form-group">
-          <label>Patología / Condición de Base</label>
-          <select id="patPatologia">
-            <option value="RIGIDEZ_POSTRAUMA">Rigidez articular post-trauma / fractura</option>
-            <option value="ACV_HEMI_SUBAGUDA">Hemiparesia post-ACV (Fase subaguda)</option>
-            <option value="TENDINOPATIA_HOMBRO">Tendinopatía / Limitación manguito rotador</option>
-            <option value="POSTOP_CODO">Postoperatorio de codo (control ROM)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Lado Afectado</label>
-          <select id="patLado">
-            <option value="Derecho">Miembro Superior Derecho</option>
-            <option value="Izquierdo">Miembro Superior Izquierdo</option>
-            <option value="Bilateral">Bilateral</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Articulación Diana</label>
-          <select id="patArticulacion">
-            <option value="Codo">Codo</option>
-            <option value="Hombro">Hombro</option>
-            <option value="Muñeca">Muñeca</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Nota / Observación Clínica</label>
-        <textarea id="patNota" rows="2">Paciente con limitación para la flexión completa de codo derecho a los 45 días post-trauma.</textarea>
-      </div>
-
-      <h3 style="margin-top: 15px;">3. Programación de Rango de Fechas de Terapia (Calendario)</h3>
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Rango de Fechas Asignado</label>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div>
-              <label style="font-size:0.75rem;">Fecha Inicio</label>
-              <input type="date" id="rxFechaInicio" value="2026-10-08">
-            </div>
-            <div>
-              <label style="font-size:0.75rem;">Fecha Fin</label>
-              <input type="date" id="rxFechaFin" value="2026-10-16">
-            </div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Rutina / Tipo de Terapia</label>
-          <select id="rxRutina" onchange="actualizarModeloTerapia()">
-            <option value="RX_FLEXOEXT_CODO" data-model="terapia.1.fbx">Flexo-extensión Activa/Asistida de Codo (terapia.1.fbx)</option>
-            <option value="RX_ABDUCCION_HOMBRO" data-model="terapia.1.fbx">Abducción de Hombro en Plano Coronal (terapia.1.fbx)</option>
-            <option value="RX_ROTACION_EXT_INT" data-model="terapia.1.fbx">Rotación / Movilidad en Eje (terapia.1.fbx)</option>
-            <option value="RX_MOV_LIBRE_CONTROL" data-model="terapia.1.fbx">Rango Libre Guiado por IA (ROM Max) (terapia.1.fbx)</option>
-          </select>
-          <small id="modelNameDisplay" style="color:#00d26a; display:block; margin-top:4px; font-family:monospace;">Archivo 3D vinculado: terapia.1.fbx</small>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button style="flex: 2;" onclick="guardarPacienteEnBaseDatos()">💾 Guardar / Actualizar Paciente en Base de Datos</button>
-        <button style="flex: 1;" class="btn-secondary" onclick="limpiarFormulario()">🔄 Nuevo Registro</button>
-      </div>
-      <div id="authBanner" class="auth-banner auth-active">✅ Paciente guardado y sincronizado con el servidor.</div>
-    </div>
-
-    <!-- PESTAÑA 2: LISTA PACIENTES -->
-    <div id="tab-lista" class="tab-content">
-      <h3>Pacientes Registrados en Sistema de Telerehabilitación</h3>
-      <table class="patients-table">
-        <thead>
-          <tr>
-            <th>Cédula (User / Pass)</th>
-            <th>Paciente</th>
-            <th>Patología / Lado</th>
-            <th>Ventana / Rango Fechas</th>
-            <th>Modelo 3D</th>
-            <th>Diagnóstico & Historial</th>
-            <th>En Vivo</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="tablaPacientesBody"></tbody>
-      </table>
-    </div>
+  <div class="form-group">
+   <label>Número de Cédula</label>
+   <input type="text" id="patLoginCedula" placeholder="Ej: 1045238910" value="1045238910">
   </div>
 
-  <!-- MODAL DE HISTORIAL -->
-  <div id="historialClinicoModal">
-    <div class="history-container">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 15px; margin-bottom: 20px;">
-        <div>
-          <span class="status-badge">DIAGNÓSTICO ACUMULADO & KINESIOLOGÍA IA</span>
-          <h2 id="historialModalTitle" style="margin-top:6px;">Historial Clínico del Paciente</h2>
-        </div>
-        <button class="btn-secondary" onclick="cerrarModalHistorial()">✕ Cerrar Ventana</button>
-      </div>
+  <button class="main-btn" onclick="loginPaciente()">Ingresar a mi Terapia</button>
+  <p id="loginError" class="error-msg">Cédula no encontrada en el sistema clínico.</p>
+ </div>
+</div>
 
-      <div id="historiaClinicaCard" style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Historia clínica</h3>
-        <div id="historiaClinicaGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px 18px; margin-top:10px; font-size:0.85rem;"></div>
-      </div>
+<div id="patientAppContainer">
 
-      <div class="kpi-cards">
-        <div class="kpi-card"><div class="lbl">Terapias Realizadas</div><div class="val" id="kpiTotalSesiones">12</div></div>
-        <div class="kpi-card"><div class="lbl">Repeticiones Totales</div><div class="val" id="kpiMinutosTotales">315 min</div></div>
-        <div class="kpi-card"><div class="lbl">Precisión Global ROM / IA</div><div class="val" id="kpiPrecisionGlobal">88.4%</div></div>
-        <div class="kpi-card"><div class="lbl">Índice Bien / Mal</div><div class="val" id="kpiRatioEjecucion" style="color:#2ecc71;">91% Bien</div></div>
-      </div>
 
-      <div class="grid-2" style="margin-bottom: 20px;">
-        <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px;">
-          <h3>Evolución del Rango de Movimiento (ROM en °)</h3>
-          <p id="diagnosticoEvolucionRom" style="font-size:0.85rem; color:#fff; line-height:1.5; margin-top:8px;">Evolución progresiva favorable.</p>
-        </div>
-        <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px;">
-          <h3>Evaluación Automatizada de Técnica</h3>
-          <p id="diagnosticoTecnicaIa" style="font-size:0.85rem; color:#fff; line-height:1.5; margin-top:8px;">Cumple umbrales óptimos.</p>
-        </div>
-      </div>
+ <div class="left-panel">
 
-      <h3>Bitácora Detallada de Sesiones Registradas</h3>
-      <table class="patients-table" style="margin-top:5px;">
-        <thead>
-          <tr>
-            <th>Sesión / Fecha</th>
-            <th>Rutina / Modelo 3D</th>
-            <th>Duración</th>
-            <th>Precisión ROM (%)</th>
-            <th>Bien / Mal (Repeticiones)</th>
-            <th>Diagnóstico del Médico</th>
-          </tr>
-        </thead>
-        <tbody id="tablaSesionesDetalle"></tbody>
-      </table>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
-        <h3>🗓️ Terapias programadas <span id="terapiasResumenMedico" style="font-size:0.75rem; color:#a0a0c0; font-weight:normal;"></span></h3>
-        <div style="font-size:0.75rem; color:#a0a0c0; margin-top:4px;">Cada terapia se habilita sola en su fecha. Aquí puedes cambiar la fecha, habilitarla, bloquearla o reabrirla para que el paciente la repita.</div>
-        <div id="listaTerapias" style="margin-top:10px; max-height:260px; overflow-y:auto; font-size:0.85rem;"></div>
-      </div>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
-        <h3>📝 Apuntes del médico</h3>
-        <div id="listaApuntes" style="margin:10px 0; max-height:200px; overflow-y:auto; font-size:0.85rem;"></div>
-        <textarea id="apunteHistorial" rows="3" placeholder="Escribe un nuevo apunte clínico..."></textarea>
-        <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
-          <button class="btn-call" onclick="guardarApunteHistorial()">💾 Guardar apunte</button>
-          <span id="apunteHistorialEstado" style="font-size:0.75rem; color:#00d26a;"></span>
-        </div>
-      </div>
-    </div>
+  <div id="loadingOverlay">
+   <div class="spinner"></div>
+   <p style="font-size:.8rem;color:#00d26a">Cargando entorno 3D (terapia.1.fbx)...</p>
+   <p id="avatarLoadMessage" style="font-size:.7rem;color:#aaa;margin-top:8px">Preparando avatar...</p>
   </div>
 
-  <!-- MODAL DE VIDEOCONFERENCIA -->
-  <div id="liveCallModal">
-    <div class="call-container" style="max-width:1100px; max-height:calc(100vh - 50px); overflow-y:auto;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 12px;">
-        <div>
-          <span class="status-badge" style="background:rgba(0,210,106,0.3);">CONEXIÓN DIRECTA EN VIVO UAC</span>
-          <h3 id="callPatientTitle" style="margin-top:6px; color:#fff;">Paciente: En vivo</h3>
-        </div>
-        <div style="display:flex; gap:10px;">
-          <button id="btnToggleMedicoCam" class="btn-call" onclick="alternarVistaMedicoEnVivo()">👨‍⚕️ Activar/Ocultar Cámara Médico</button>
-          <button class="btn-danger" onclick="cerrarSesionEnVivo()">❌ Finalizar Conexión</button>
-        </div>
-      </div>
+  <div class="telemetry-panel">
+   <div class="telemetry-title">Seguimiento de sesión</div>
 
-      <div id="liveMetricsBar" style="display:flex; gap:18px; flex-wrap:wrap; font-family:monospace; font-size:0.8rem; color:#a0a0c0; padding:8px 2px;">
-        <span>Hombro: <b id="mHombro" style="color:#00d26a;">--</b></span>
-        <span>Codo: <b id="mCodo" style="color:#00d26a;">--</b></span>
-        <span>Cadera: <b id="mCadera" style="color:#00d26a;">--</b></span>
-        <span>Repeticiones: <b id="mRep" style="color:#00d26a;">0</b></span>
-        <span>Resp: <b id="mResp" style="color:#00d26a;">--</b></span>
-        <span>SpO₂: <b id="mSpO2" style="color:#00d26a;">--</b></span>
-        <span>Temp: <b id="mTemp" style="color:#00d26a;">--</b></span>
-        <span>Terapia: <b id="mEstadoTerapia" style="color:#ffd700;">--</b></span>
-        <span id="mEstadoLlamada" style="color:#ffd700;">Sin llamada</span>
-      </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Paciente:</span>
+    <span class="telemetry-value" id="telemetryName">-</span>
+   </div>
 
-      <div id="liveControlBar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <span style="font-size:0.75rem; color:#a0a0c0;">Control de la terapia del paciente:</span>
-        <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('iniciar')">▶ Iniciar</button>
-        <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('pausar')">⏸ Pausar</button>
-        <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('continuar')">⏯ Continuar</button>
-        <button class="btn-secondary" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('reiniciar')">🔄 Reiniciar</button>
-        <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('finalizar')">⏹ Finalizar</button>
-      </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Frecuencia cardiaca:</span>
+    <span class="telemetry-value" id="heartRate">No disponible</span>
+   </div>
 
-      <div class="call-stages" id="callStagesGrid">
-        <div class="call-box" style="position:relative;">
-          <span class="mode-tag">CÁMARA DEL PACIENTE</span>
-          <video id="patientLiveFeedVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:block;"></video>
-          <div id="patientFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace;">
-            <div style="font-size:3rem;">👤</div>
-            <p style="margin-top:8px;">Esperando flujo del paciente...</p>
-          </div>
-        </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Frecuencia respiratoria:</span>
+    <span class="telemetry-value" id="respiratoryRate">No disponible</span>
+   </div>
 
-        <div class="call-box" id="espejoBox" style="position:relative; overflow:hidden; background:#000;">
-          <span class="mode-tag" style="z-index:6;">PANTALLA DEL PACIENTE (EN VIVO)</span>
-          <button onclick="pantallaCompletaEspejo('espejoBox')" style="position:absolute; top:8px; right:8px; z-index:6; background:rgba(0,0,0,0.7); color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:4px 10px; font-size:0.75rem;">⛶ Pantalla completa</button>
-          <iframe id="espejoFrame" title="Pantalla del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
-        </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Saturación de oxígeno:</span>
+    <span class="telemetry-value" id="oxygenLevel">No disponible</span>
+   </div>
 
-        <div class="call-box" style="position:relative;">
-          <span class="mode-tag">CÁMARA / RETORNO MÉDICO</span>
-          <video id="doctorLiveVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:none;"></video>
-          <div id="doctorCallOverlay" style="color:#a0a0c0; font-size:0.85rem; padding:20px; text-align:center;">
-            <p>Cámara médica inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>
-          </div>
-        </div>
-      </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Temperatura:</span>
+    <span class="telemetry-value" id="bodyTemperature">No disponible</span>
+   </div>
 
-      <div style="background:#0b0b14; border:1px solid #303050; border-radius:8px; padding:10px;">
-        <label style="font-size:0.75rem; color:#a0a0c0;">📝 Apunte clínico (se guarda en la historia clínica del paciente)</label>
-        <textarea id="apunteEnVivo" rows="2" placeholder="Escribe aquí tu observación..."></textarea>
-        <div style="display:flex; gap:8px; margin-top:6px; align-items:center; flex-wrap:wrap;">
-          <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="guardarApunteEnVivo()">💾 Guardar apunte</button>
-          <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="abrirHistorialDesdeLlamada()">📊 Ver historia clínica</button>
-          <span id="apunteEstado" style="font-size:0.75rem; color:#00d26a;"></span>
-        </div>
-      </div>
-    </div>
+   <div class="telemetry-item">
+    <span class="telemetry-label">Ángulo estimado:</span>
+    <span class="telemetry-value" id="valAngle">--</span>
+   </div>
+
+   <div class="telemetry-item">
+    <span class="telemetry-label">Seguimiento:</span>
+    <span class="telemetry-value" id="poseStatus">Inactivo</span>
+   </div>
+
+   <div id="connectionStatus">Servidor: comprobando...</div>
+   <div id="callStatus">Videollamada: sin iniciar</div>
+   <div id="mqttStatus" style="font-size:.65rem;color:#ffd166;margin-top:3px">Sensores: sin iniciar</div>
   </div>
 
-  <div id="observarModal" style="display:none; position:fixed; inset:0; background:#05050a; z-index:1500; flex-direction:column;">
-    <div style="display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0f0f1b; border-bottom:1px solid #303050;">
-      <span id="observarTitulo" style="font-weight:bold; color:#00d26a;">Observando</span>
-      <span id="observarEstado" style="font-size:0.8rem; color:#ffd700;"></span>
-      <span style="flex:1;"></span>
-      <button onclick="pantallaCompletaEspejo('observarBox')" style="background:transparent; color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:6px 12px; font-size:0.8rem;">⛶ Pantalla completa</button>
-      <button onclick="cerrarObservacion()" style="background:transparent; color:#ff4d4d; border:1px solid #ff4d4d; border-radius:4px; padding:6px 12px; font-size:0.8rem;">✖ Cerrar</button>
+  <div class="avatar-container">
+   <canvas id="avatarCanvas"></canvas>
+
+   <div id="doctorEmergencyPanel">
+    <div class="doctor-video-header">
+     <span>🚨 INTERVENCIÓN MÉDICA UAC</span>
+     <span style="color:white" id="doctorStatusLabel">Esperando al especialista...</span>
+     <span style="font-size:.65rem;color:#ffd700" id="doctorTimerLabel">Tiempo: 10:00</span>
     </div>
-    <div id="observarBox" style="position:relative; flex:1; overflow:hidden; background:#000;">
-      <iframe id="observarFrame" title="Observación del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
-    </div>
+
+    <video id="doctorRemoteVideo" autoplay playsinline></video>
+   </div>
   </div>
 
-  <script>
-    let socket = null;
-    let streamMedicoActivo = null;
-    let streamPaciente = null;
-    let peerConnection = null;
-    let candidatosPendientes = [];
-    let pacienteEnLlamadaActual = null;
-    let alertaActual = null;
-    let pacientesEnLinea = new Set();
-    let ultimasMetricas = {};
-    let ultimoEstadoPaciente = {};
-    const espejos = {};
-    let trAvatar = null;
-    let streamAvatarPaciente = null;
-    let historialCedulaActual = null;
-    const ETIQUETAS_ESTADO = {
-      ESPERANDO: 'En espera',
-      PREPARANDO: 'Preparando',
-      TERAPIA: 'En curso',
-      PAUSADA: 'En pausa',
-      REPOSO: 'Finalizada',
-      ALERTA_MEDICA: 'SOS activo',
-      CERRADA: 'Sesión cerrada'
-    };
-    let configuracionIce = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    let iceCargado = false;
+  <div class="precision-panel">
+   <div class="precision-title">Contador de movimientos detectados</div>
+   <div class="precision-value" id="repCounter">0</div>
 
-    window.addEventListener('DOMContentLoaded', () => {
-      calcularEdadAutomatica();
-      actualizarModeloTerapia();
-      iniciarConexiónSocketMedico();
+   <div class="feedback-text" id="feedbackMessage">
+    Di "Comenzar" o utiliza el botón para iniciar.
+   </div>
+   <button class="btn-manual-start" onclick="forzarInicioTerapia()">▶ Comenzar terapia</button>
+  </div>
+
+ </div>
+
+ <div class="right-panel">
+  <div class="uac-logo-container">
+   <img src="./escudo_uac.png" alt="Escudo UAC">
+  </div>
+
+  <div style="position:relative; width:100%; height:75vh;">
+   <video id="webcam" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1); background:#080810; display:block;"></video>
+   <!-- Canvas de esqueleto posicionado directamente encima del video de la derecha -->
+   <canvas id="poseCanvas"></canvas>
+  </div>
+
+  <div class="right-content">
+
+   <div class="card">
+    <h3>Ficha del Paciente</h3>
+    <div class="info-grid">
+     <div><div class="info-label">Nombre</div><div class="info-value" id="dispNombre">-</div></div>
+     <div><div class="info-label">Cédula</div><div class="info-value" id="dispCedula">-</div></div>
+     <div><div class="info-label">Edad</div><div class="info-value" id="dispEdad">-</div></div>
+    </div>
+   </div>
+
+   <div class="card">
+    <h3>Mis terapias <span id="terapiasResumen" style="color:#a0a0c0;font-weight:normal;text-transform:none;"></span></h3>
+    <div style="font-size:.65rem;color:#a0a0c0;margin-bottom:3px">
+     Del <strong id="dispInicio" style="color:#00d26a">-</strong>
+     al <strong id="dispFin" style="color:#00d26a">-</strong>
+    </div>
+    <div class="days-list" id="daysSequenceContainer"></div>
+   </div>
+
+   <div class="card">
+    <h3>Seguimiento corporal</h3>
+    <div class="info-grid">
+     <div><div class="info-label">Hombro</div><div class="info-value" id="angleShoulder">--</div></div>
+     <div><div class="info-label">Codo</div><div class="info-value" id="angleElbow">--</div></div>
+     <div><div class="info-label">Cadera</div><div class="info-value" id="angleHip">--</div></div>
+    </div>
+    <div style="font-size:.65rem;color:#a0a0c0;margin-top:5px" id="poseFeedback">
+     Colócate frente a la cámara y procura que tu cuerpo esté visible.
+    </div>
+   </div>
+
+   <div class="ai-speech-bubble">
+    <div class="ai-speech-header">Soy tu asistente - UAC</div>
+    <div class="ai-speech-text" id="speechText">Inicia sesión para comenzar.</div>
+   </div>
+
+   <div id="vozEstado" style="font-size:.65rem;color:#a0a0c0;margin:4px 0 8px;"></div>
+
+   <div class="action-row">
+    <button class="action-btn sos-btn" onclick="simularAlertaClinica()">🚨 Ayuda Médica (SOS)</button>
+    <button class="action-btn exit-btn" onclick="cerrarSesionPaciente()">🚪 Salir</button>
+   </div>
+
+
+  </div>
+ </div>
+</div>
+
+<div id="avisoMedico" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#0f3d24;border:1px solid #00d26a;color:#fff;padding:10px 18px;border-radius:8px;z-index:9998;font-family:Arial,sans-serif;font-size:.9rem;box-shadow:0 4px 15px rgba(0,0,0,.5);max-width:90%;text-align:center;">👨‍⚕️ <span id="avisoMedicoTexto">El médico se ha conectado a tu sesión.</span></div>
+
+<script>
+/* =========================================================
+   VARIABLES GENERALES
+========================================================= */
+
+let recognition = null;
+let aiState = "ESPERANDO";
+let currentRep = 0;
+
+let diaActivoSeleccionado = null;
+let maxUnlockedDay = 1;
+
+let scene, camera, renderer, controls;
+let clock = new THREE.Clock();
+let fbxMixer = null;
+let fbxModel = null;
+let animationActions = [];
+
+let pose = null;
+let poseCamera = null;
+let poseReady = false;
+let lastPoseResults = null;
+
+let pacienteActual = null;
+let socket = null;
+let peerConnection = null;
+let localStream = null;
+
+let doctorTimerInterval = null;
+let doctorSecondsRemaining = 600;
+let callActive = false;
+
+let brazoArriba = false;
+let ultimaRepeticion = 0;
+let sessionResults = [];
+
+let speechQueue = [];
+let speechQueueTimer = null;
+let speakingNumber = false;
+let sesionGuardada = false;
+
+let RTC_CONFIGURATION = {
+ iceServers:[
+  {urls:"stun:stun.l.google.com:19302"}
+ ]
+};
+
+let iceCargado = false;
+let candidatosPendientes = [];
+let panelAbiertoPorLlamada = false;
+let ultimoEnvioMovimiento = 0;
+let timerEstadoPaciente = null;
+let timerInstantaneaTerapia = null;
+let timerAvisoMedico = null;
+let vozActiva = false;
+let vozBloqueada = false;
+let conteoGuardadoPausa = 0;
+let streamAvatar = null;
+let streamSinCamara = null;
+let terapiasConfig = {};
+let diasTotalActual = 0;
+let diaInicioActual = null;
+let espejoEstado = "ESPERANDO";
+let espejoAnimando = false;
+
+/* Modo espejo: el portal médico abre esta misma página dentro de un marco
+   (?espejo=CEDULA) para mostrar exactamente lo que ve el paciente. */
+const PARAM_ESPEJO = new URLSearchParams(location.search).get("espejo");
+
+if(PARAM_ESPEJO){
+ window.addEventListener("message",recibirEstadoEspejo);
+ window.addEventListener("load",()=>iniciarModoEspejo(PARAM_ESPEJO));
+}
+
+/* Pide al servidor la lista de servidores STUN/TURN (así las claves
+   de TURN no quedan escritas en el HTML). Si falla, se usa solo STUN. */
+async function cargarConfiguracionIce(){
+ if(iceCargado) return;
+ try{
+  const r = await fetch("/api/ice",{cache:"no-store"});
+  if(r.ok){
+   const cfg = await r.json();
+   if(cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length){
+    RTC_CONFIGURATION = {iceServers:cfg.iceServers};
+    iceCargado = true;
+   }
+  }
+ }catch(error){
+  console.warn("No se pudo leer /api/ice, se usa solo STUN:",error);
+ }
+}
+
+/* =========================================================
+   LOGIN Y DATOS DEL PACIENTE
+========================================================= */
+
+function mezclarSesionesLocales(cedula,sesionesServidor){
+ try{
+  const key = `uac_sesiones_${cedula}`;
+  const locales = JSON.parse(localStorage.getItem(key) || "[]");
+  const mapa = new Map();
+  (Array.isArray(sesionesServidor)?sesionesServidor:[]).forEach(x=>mapa.set(String(x.fecha),x));
+  locales.forEach(x=>{ if(!mapa.has(String(x.fecha))) mapa.set(String(x.fecha),x); });
+  localStorage.setItem(key,JSON.stringify([...mapa.values()]));
+ }catch(e){}
+}
+
+async function loginPaciente(){
+
+ const cedulaInput = document.getElementById("patLoginCedula").value.trim();
+ const errorEl = document.getElementById("loginError");
+
+ if(!cedulaInput){
+  errorEl.style.display = "block";
+  return;
+ }
+
+ try{
+
+  let encontrado = null;
+  let servidorRespondio = false;
+
+  // 1) Se busca primero en el servidor (así funciona desde cualquier dispositivo)
+  try{
+   const r = await fetch("/api/paciente/login",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({cedula:cedulaInput}),
+    cache:"no-store"
+   });
+
+   if(r.status===429){
+    alert("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
+    return;
+   }
+
+   if(r.ok){
+    encontrado = await r.json();
+    servidorRespondio = true;
+   }else if(r.status===404){
+    servidorRespondio = true;
+   }
+  }catch(e){
+   servidorRespondio = false;
+  }
+
+  if(encontrado){
+   const ced = encontrado.paciente.documento;
+   mezclarSesionesLocales(ced,encontrado.sesionesHistorial);
+   try{
+    localStorage.setItem(`uac_terapias_${ced}`,JSON.stringify(encontrado.terapias || {}));
+   }catch(e){}
+  }
+
+  // 2) Solo si el servidor no responde, se usan los datos de este navegador
+  if(!encontrado && !servidorRespondio){
+
+   const baseRaw = localStorage.getItem("uac_base_pacientes");
+   const basePacientes = baseRaw ? JSON.parse(baseRaw) : [];
+
+   encontrado = basePacientes.find(p=>
+    p.paciente && String(p.paciente.documento)===cedulaInput
+   );
+
+   if(!encontrado){
+    const fallback = localStorage.getItem("uac_historia_clinica");
+    if(fallback){
+     const fbObj = JSON.parse(fallback);
+     if(fbObj.paciente && String(fbObj.paciente.documento)===cedulaInput){
+      encontrado = fbObj;
+     }
+    }
+   }
+  }
+
+  if(!encontrado){
+   errorEl.style.display = "block";
+   return;
+  }
+
+  if(!encontrado.programacionMensual){
+   alert("El registro del paciente no contiene una programación mensual.");
+   return;
+  }
+
+  errorEl.style.display = "none";
+  cargarDashboardPaciente(encontrado);
+
+ }catch(error){
+
+  console.error("Error leyendo los datos del paciente:",error);
+  alert("No fue posible leer los datos del paciente. Revisa el registro clínico.");
+
+ }
+}
+
+async function cargarDashboardPaciente(data){
+
+ pacienteActual = data;
+
+ document.getElementById("patientLoginSection").style.display = "none";
+ document.getElementById("patientAppContainer").style.display = "flex";
+
+ const p = data.paciente;
+ const prog = data.programacionMensual;
+
+ document.getElementById("telemetryName").innerText =
+  `${p.nombres || ""} ${p.apellidos || ""}`;
+
+ document.getElementById("dispNombre").innerText =
+  `${p.nombres || ""} ${p.apellidos || ""}`;
+
+ document.getElementById("dispCedula").innerText = p.documento || "-";
+
+ document.getElementById("dispEdad").innerText =
+  `${p.edadCalculada || 0} años`;
+
+ document.getElementById("dispInicio").innerText = prog.fechaInicio;
+ document.getElementById("dispFin").innerText = prog.fechaFin;
+
+ const dStart = new Date(prog.fechaInicio+"T00:00:00");
+ const dEnd = new Date(prog.fechaFin+"T00:00:00");
+
+ const totalDays = Math.floor((dEnd-dStart)/86400000)+1;
+
+ const savedMaxDay = localStorage.getItem(`uac_max_day_${p.documento}`);
+
+ maxUnlockedDay = savedMaxDay ? parseInt(savedMaxDay,10) : 1;
+
+ cargarTerapiasConfig(data);
+ renderizarSecuenciaDias(totalDays,dStart);
+ seleccionarDiaPorDefecto(totalDays,dStart);
+
+ iniciarConexionServidor();
+ iniciarMQTT();
+ init3DAvatar();
+ await initCamera();
+ iniciarSeguimientoCorporal();
+
+ const saludo =
+  `Hola ${p.nombres || ""}. Soy tu asistente. Estoy aquí para acompañarte durante tu sesión. Di comenzar cuando estés preparado.`;
+
+ actualizarDialogo(saludo);
+ hablarIA(saludo,()=>iniciarReconocimientoVoz());
+
+ // Si la voz del asistente no pudo reproducirse, igual se activa el micrófono
+ setTimeout(()=>{
+  if(!vozActiva && !vozBloqueada){
+   iniciarReconocimientoVoz();
+  }
+ },8000);
+}
+
+/* =========================================================
+   SECUENCIA DE DÍAS
+========================================================= */
+
+function fechaLocal(date){
+
+ const y = date.getFullYear();
+ const m = String(date.getMonth()+1).padStart(2,"0");
+ const d = String(date.getDate()).padStart(2,"0");
+
+ return `${y}-${m}-${d}`;
+}
+
+function cargarTerapiasConfig(data){
+ let cfg = data.terapias;
+
+ if(!cfg){
+  try{
+   cfg = JSON.parse(localStorage.getItem(`uac_terapias_${data.paciente.documento}`) || "null");
+  }catch(e){
+   cfg = null;
+  }
+ }
+
+ terapiasConfig = cfg || {};
+}
+
+function leerSesionesPaciente(){
+ if(!pacienteActual) return [];
+ try{
+  return JSON.parse(
+   localStorage.getItem(`uac_sesiones_${pacienteActual.paciente.documento}`) || "[]"
+  );
+ }catch(e){
+  return [];
+ }
+}
+
+/* Estado de una terapia: la fecha programada la habilita sola, salvo que
+   el médico la haya habilitado o bloqueado a mano. */
+function infoTerapiaDia(n,fechaBase){
+ const cfg = terapiasConfig[n] || {};
+ const programada = cfg.programada || fechaBase;
+ const hoy = fechaLocal(new Date());
+ const manual = typeof cfg.habilitada === "boolean";
+ const habilitada = manual ? cfg.habilitada : (programada <= hoy);
+
+ const completada = leerSesionesPaciente().some(s=>
+  Number(s.dia)===n && (!cfg.reabiertaEn || String(s.fecha) > cfg.reabiertaEn)
+ );
+
+ return {habilitada,completada,programada};
+}
+
+function renderizarSecuenciaDias(totalDays,dStart){
+
+ diasTotalActual = totalDays;
+ diaInicioActual = dStart;
+
+ const container = document.getElementById("daysSequenceContainer");
+ container.innerHTML = "";
+
+ let completadas = 0;
+ let habilitadas = 0;
+
+ for(let i=0;i<totalDays;i++){
+
+  const currentDate = new Date(dStart);
+  currentDate.setDate(dStart.getDate()+i);
+
+  const dateStr = fechaLocal(currentDate);
+  const dayNumber = i+1;
+  const info = infoTerapiaDia(dayNumber,dateStr);
+
+  if(info.completada){
+   completadas++;
+  }else if(info.habilitada){
+   habilitadas++;
+  }
+
+  const activa = diaActivoSeleccionado && diaActivoSeleccionado.numDia===dayNumber;
+
+  const card = document.createElement("div");
+
+  card.className =
+   `day-card ${info.habilitada?"unlocked":""} ${activa?"active":""}`;
+
+  card.id = `day-card-${dayNumber}`;
+
+  const estado = info.completada
+   ? "✅ Completada"
+   : (info.habilitada ? "▶ Habilitada" : "🔒 Bloqueada");
+
+  card.innerHTML = `
+   <div class="day-num">Día ${dayNumber}</div>
+   <div class="day-date">${info.programada}</div>
+   <div class="day-state">${estado}</div>
+  `;
+
+  if(info.habilitada){
+   card.onclick = ()=>seleccionarDiaSecuencia(dayNumber,dateStr);
+  }
+
+  container.appendChild(card);
+ }
+
+ const resumen = document.getElementById("terapiasResumen");
+
+ if(resumen){
+  resumen.innerText =
+   `· ${totalDays} terapias · ${completadas} completadas · ${habilitadas} habilitadas`;
+ }
+}
+
+function refrescarTerapias(){
+ if(diaInicioActual && diasTotalActual){
+  renderizarSecuenciaDias(diasTotalActual,diaInicioActual);
+ }
+}
+
+function seleccionarDiaPorDefecto(totalDays,dStart){
+
+ let primero = null;
+ let pendiente = null;
+
+ for(let i=0;i<totalDays;i++){
+
+  const d = new Date(dStart);
+  d.setDate(dStart.getDate()+i);
+
+  const ds = fechaLocal(d);
+  const info = infoTerapiaDia(i+1,ds);
+
+  if(info.habilitada){
+   if(primero===null) primero = {n:i+1,ds};
+   if(!info.completada && pendiente===null) pendiente = {n:i+1,ds};
+  }
+ }
+
+ const elegido = pendiente || primero;
+
+ if(elegido){
+  seleccionarDiaSecuencia(elegido.n,elegido.ds);
+ }else{
+  diaActivoSeleccionado = null;
+  refrescarTerapias();
+  actualizarDialogo("Aún no tienes terapias habilitadas. Tu médico las habilitará.");
+ }
+}
+
+function aplicarTerapiasDelMedico(terapias){
+ if(!pacienteActual || !terapias) return;
+
+ terapiasConfig = terapias;
+
+ try{
+  localStorage.setItem(
+   `uac_terapias_${pacienteActual.paciente.documento}`,
+   JSON.stringify(terapias)
+  );
+ }catch(e){}
+
+ refrescarTerapias();
+ actualizarDialogo("Tu médico actualizó tus terapias.");
+}
+
+function seleccionarDiaSecuencia(numDia,fechaStr){
+
+ if(!infoTerapiaDia(numDia,fechaStr).habilitada)return;
+
+ diaActivoSeleccionado = {numDia,fechaStr};
+
+ document.querySelectorAll(".day-card").forEach(c=>{
+  c.classList.remove("active");
+ });
+
+ const targetCard = document.getElementById(`day-card-${numDia}`);
+
+ if(targetCard)targetCard.classList.add("active");
+
+ actualizarDialogo(`Día ${numDia} seleccionado. Di comenzar cuando estés preparado.`);
+}
+
+/* =========================================================
+   CÁMARA DEL PACIENTE
+========================================================= */
+
+async function initCamera(){
+
+ const video = document.getElementById("webcam");
+
+ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  actualizarDialogo("El navegador no permite acceder a la cámara. Abre el portal mediante localhost o HTTPS.");
+  return;
+ }
+
+ try{
+
+  localStream = await navigator.mediaDevices.getUserMedia({
+   video:{width:{ideal:1280},height:{ideal:720}},
+   audio:true
+  });
+
+ }catch(error){
+
+  console.warn("No se pudo acceder a cámara y micrófono:",error);
+
+  try{
+
+   localStream = await navigator.mediaDevices.getUserMedia({
+    video:true,
+    audio:false
+   });
+
+  }catch(secondError){
+
+   console.error("No se pudo abrir la cámara:",secondError);
+
+   actualizarDialogo("No se detectó una cámara disponible. Puedes revisar el permiso de cámara del navegador.");
+
+   return;
+  }
+ }
+
+ video.srcObject = localStream;
+
+ try{
+  await video.play();
+ }catch(e){
+  console.warn(e);
+ }
+}
+
+
+/* =========================================================
+   ASISTENTE DE VOZ
+========================================================= */
+
+let numeroConteoVoz = 0;
+let numeroEnReproduccion = null;
+let conteoVozActivo = false;
+
+function detenerColaVoz(){
+
+ clearTimeout(speechQueueTimer);
+ speechQueueTimer = null;
+
+ speechQueue = [];
+ speakingNumber = false;
+
+ numeroConteoVoz = 0;
+ numeroEnReproduccion = null;
+ conteoVozActivo = false;
+}
+
+function hablarIA(texto,callback){
+
+ detenerColaVoz();
+
+ if(!("speechSynthesis" in window)){
+  if(callback)callback();
+  return;
+ }
+
+ window.speechSynthesis.cancel();
+
+ const utterance = new SpeechSynthesisUtterance(texto);
+
+ utterance.lang = "es-ES";
+ utterance.rate = 1;
+ utterance.pitch = 1;
+
+ if(callback){
+  utterance.onend = callback;
+ }
+
+ window.speechSynthesis.speak(utterance);
+}
+
+function actualizarDialogo(texto){
+
+ document.getElementById("speechText").innerText = texto;
+}
+
+// Inicia el conteo desde 1.
+function iniciarConteoVoz(){
+
+ if(!("speechSynthesis" in window))return;
+
+ numeroConteoVoz = 0;
+ numeroEnReproduccion = null;
+ conteoVozActivo = true;
+ speakingNumber = false;
+
+ reproducirSiguienteNumero();
+}
+
+// Pronuncia del 1 al 5.
+function reproducirSiguienteNumero(){
+
+ if(aiState !== "TERAPIA" || !conteoVozActivo)return;
+
+ if(speakingNumber)return;
+
+ // Al completar el número 5, finaliza la sesión.
+ if(numeroConteoVoz >= 5){
+
+  conteoVozActivo = false;
+
+  finalizarTerapia();
+
+  return;
+ }
+
+ speakingNumber = true;
+
+ // Si se interrumpió un número, vuelve a pronunciarlo.
+ if(numeroEnReproduccion === null){
+  numeroEnReproduccion = numeroConteoVoz + 1;
+ }
+
+ const numero = numeroEnReproduccion;
+
+ const utterance = new SpeechSynthesisUtterance(String(numero));
+
+ utterance.lang = "es-ES";
+ utterance.rate = 1;
+ utterance.pitch = 1;
+
+ utterance.onend = ()=>{
+
+  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
+
+  numeroConteoVoz = numero;
+  numeroEnReproduccion = null;
+  speakingNumber = false;
+
+  // Después del número 5, finalizar inmediatamente.
+  if(numeroConteoVoz >= 5){
+   reproducirSiguienteNumero();
+   return;
+  }
+
+  // Esperar 3 segundos antes del siguiente número.
+  speechQueueTimer = setTimeout(()=>{
+   reproducirSiguienteNumero();
+  },3000);
+
+ };
+
+ utterance.onerror = ()=>{
+
+  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
+
+  speakingNumber = false;
+
+  // Reintentar el mismo número.
+  speechQueueTimer = setTimeout(()=>{
+   reproducirSiguienteNumero();
+  },3000);
+
+ };
+
+ window.speechSynthesis.speak(utterance);
+}
+
+
+function iniciarReconocimientoVoz(){
+
+ const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+ if(!SpeechRecognition){
+  console.warn("Reconocimiento de voz no disponible en este navegador.");
+  vozBloqueada = true;
+  actualizarEstadoVoz("🎤 Este navegador no permite comandos de voz. Abre el portal del paciente en Chrome o Edge.");
+  return;
+ }
+
+ if(recognition){
+  try{
+   recognition.stop();
+  }catch(e){}
+ }
+
+ recognition = new SpeechRecognition();
+
+ recognition.lang = "es-ES";
+ recognition.continuous = true;
+ recognition.interimResults = false;
+
+ recognition.onstart = ()=>{
+  vozActiva = true;
+  actualizarEstadoVoz("🎤 Voz activa: te estoy escuchando.");
+ };
+
+ recognition.onerror = event=>{
+  if(event.error === "not-allowed" || event.error === "service-not-allowed"){
+   vozBloqueada = true;
+   actualizarEstadoVoz("🎤 Voz bloqueada: permite el micrófono y usa Chrome o Edge. Puedes usar los botones.");
+  }else if(event.error === "network"){
+   actualizarEstadoVoz("🎤 La voz necesita conexión a internet.");
+  }else if(event.error !== "no-speech" && event.error !== "aborted"){
+   actualizarEstadoVoz("🎤 Voz: "+event.error);
+  }
+ };
+
+ recognition.onresult = event=>{
+
+  const resultado = event.results[event.results.length-1];
+  const crudo = resultado[0].transcript.trim();
+
+  actualizarEstadoVoz(`🎤 Escuché: "${crudo}"`);
+
+  const comando = interpretarComandoVoz(normalizarVoz(crudo));
+
+  if(comando){
+   ejecutarComandoTerapia(comando,"voz");
+  }
+
+ };
+
+ recognition.onend = ()=>{
+
+  vozActiva = false;
+
+  if(aiState!=="CERRADA" && !vozBloqueada){
+
+   setTimeout(()=>{
+
+    try{
+     recognition.start();
+    }catch(e){}
+
+   },800);
+
+  }
+ };
+
+ try{
+  recognition.start();
+ }catch(e){}
+}
+
+function actualizarEstadoVoz(texto){
+ const el = document.getElementById("vozEstado");
+ if(el) el.innerText = texto;
+}
+
+function normalizarVoz(texto){
+ return String(texto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+}
+
+/* Traduce lo que dijo el paciente a un comando. El texto ya viene
+   en minúsculas y sin tildes. */
+function interpretarComandoVoz(t){
+ if(/ayuda medic[oa]/.test(t) || /solicit\w*.*medico/.test(t) || /\b(sos|s o s)\b/.test(t)) return "ayuda";
+ if(/\b(colgar|cuelga)\b/.test(t)) return "colgar";
+ if(/\b(salir)\b/.test(t)) return "salir";
+ if(/(de nuevo|otra vez|reinici|volver a empezar|volver a comenzar)/.test(t)) return "reiniciar";
+ if(/\b(pausa|pausar|parar|detener|detente|alto)\b/.test(t)) return "pausar";
+ if(/\b(continuar|continua|seguir|sigue|reanudar|reanuda)\b/.test(t)) return "continuar";
+ if(/\b(finalizar|finaliza|terminar|termina)\b/.test(t)) return "finalizar";
+ if(/\b(comenzar|comienza|empezar|empieza|iniciar|inicia)\b/.test(t)) return "iniciar";
+ return null;
+}
+
+function pausarTerapia(origen){
+
+ if(aiState!=="TERAPIA") return;
+
+ conteoGuardadoPausa = numeroConteoVoz;
+ aiState = "PAUSADA";
+
+ detenerColaVoz();
+
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+
+ if(fbxMixer && animationActions.length){
+  animationActions.forEach(action=>{ action.paused = true; });
+ }
+
+ const mensaje = origen==="medico"
+  ? "El médico pausó la terapia."
+  : "Terapia en pausa. Di continuar o pulsa Continuar para seguir.";
+
+ document.getElementById("feedbackMessage").innerText = mensaje;
+ actualizarDialogo(mensaje);
+}
+
+function continuarTerapia(origen){
+
+ if(aiState!=="PAUSADA") return;
+
+ aiState = "TERAPIA";
+ brazoArriba = false;
+
+ if(fbxMixer && animationActions.length){
+  animationActions.forEach(action=>{ action.paused = false; });
+ }
+
+ document.getElementById("feedbackMessage").innerText =
+  "Seguimiento corporal activo. Realiza el movimiento indicado.";
+ actualizarDialogo("Continuamos con la terapia.");
+
+ // Retoma el conteo donde se quedó
+ numeroConteoVoz = conteoGuardadoPausa;
+ numeroEnReproduccion = null;
+ speakingNumber = false;
+ conteoVozActivo = true;
+
+ reproducirSiguienteNumero();
+}
+
+/* Empieza de nuevo: la sesión en curso se descarta (no se guarda) */
+function reiniciarTerapia(origen){
+
+ if(aiState==="CERRADA") return;
+
+ detenerColaVoz();
+
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+
+ if(fbxMixer){
+  fbxMixer.stopAllAction();
+ }
+
+ aiState = "ESPERANDO";
+ iniciarTerapia();
+}
+
+/* Un solo punto de entrada para voz, botones y médico */
+function ejecutarComandoTerapia(comando,origen){
+
+ if(origen==="medico" && (comando==="ayuda" || comando==="colgar" || comando==="salir")) return;
+
+ const verbosMedico = {
+  iniciar:"inició la terapia",
+  pausar:"pausó la terapia",
+  continuar:"reanudó la terapia",
+  reiniciar:"reinició la terapia",
+  finalizar:"finalizó la terapia"
+ };
+
+ if(origen==="medico" && verbosMedico[comando]){
+  mostrarAvisoMedico("El médico "+verbosMedico[comando]+".",true);
+ }
+
+ switch(comando){
+
+  case "iniciar":
+   if(aiState==="REPOSO" || aiState==="ALERTA_MEDICA"){
+    aiState = "ESPERANDO";
+   }
+   if(aiState==="ESPERANDO" || aiState==="PAUSADA"){
+    iniciarTerapia();
+   }
+   break;
+
+  case "pausar":
+   pausarTerapia(origen);
+   break;
+
+  case "continuar":
+   continuarTerapia(origen);
+   break;
+
+  case "reiniciar":
+   reiniciarTerapia(origen);
+   break;
+
+  case "finalizar":
+   if(aiState==="TERAPIA" || aiState==="PAUSADA"){
+    finalizarTerapia();
+   }
+   break;
+
+  case "ayuda":
+   if(aiState!=="ALERTA_MEDICA"){
+    simularAlertaClinica();
+   }
+   break;
+
+  case "colgar":
+   if(peerConnection){
+    colgarLlamada();
+   }else{
+    actualizarDialogo("No hay una videollamada activa.");
+   }
+   break;
+
+  case "salir":
+   cerrarSesionPaciente();
+   break;
+ }
+}
+
+function forzarInicioTerapia(){
+ ejecutarComandoTerapia("iniciar","paciente");
+}
+
+/* =========================================================
+   MEDIAPIPE - SEGUIMIENTO CORPORAL CORREGIDO
+========================================================= */
+
+function iniciarSeguimientoCorporal(){
+
+ if(typeof Pose==="undefined"){
+
+  console.error("MediaPipe Pose no se cargó.");
+
+  document.getElementById("poseStatus").innerText = "No disponible";
+
+  document.getElementById("poseFeedback").innerText =
+   "No se pudo cargar MediaPipe. Comprueba tu conexión a Internet.";
+
+  return;
+ }
+
+ pose = new Pose({
+
+  locateFile:(file)=>{
+   return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+  }
+
+ });
+
+ // Umbrales ajustados a 0.35 para máxima sensibilidad y detección fluida
+ pose.setOptions({
+
+  modelComplexity:1,
+  smoothLandmarks:true,
+  enableSegmentation:false,
+  smoothSegmentation:false,
+  minDetectionConfidence:.35,
+  minTrackingConfidence:.35
+
+ });
+
+ pose.onResults(procesarResultadosPose);
+
+ const videoElement = document.getElementById("webcam");
+
+ poseCamera = new Camera(videoElement,{
+
+  onFrame:async()=>{
+
+   if(pose && videoElement.readyState>=2){
+    await pose.send({image:videoElement});
+   }
+
+  },
+
+  width:1280,
+  height:720
+
+ });
+
+ poseCamera.start()
+  .then(()=>{
+   poseReady = true;
+   console.log("MediaPipe Camera iniciada correctamente.");
+  })
+  .catch((err)=>{
+   console.error("Error al iniciar MediaPipe Camera:", err);
+  });
+}
+
+function calcularAngulo(a,b,c){
+
+ const radians =
+  Math.atan2(c.y-b.y,c.x-b.x) -
+  Math.atan2(a.y-b.y,a.x-b.x);
+
+ let angle = Math.abs(radians*180/Math.PI);
+
+ if(angle>180)angle=360-angle;
+
+ return Math.round(angle);
+}
+
+function procesarResultadosPose(results){
+
+ lastPoseResults = results;
+
+ const canvas = document.getElementById("poseCanvas");
+ const ctx = canvas.getContext("2d");
+ const video = document.getElementById("webcam");
+
+ if(!canvas || !video) return;
+
+ // Sincronización exacta del canvas con las dimensiones del video de la webcam
+ if(canvas.width!==video.videoWidth || canvas.height!==video.videoHeight){
+
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+
+ }
+
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ if(!results.poseLandmarks){
+
+  document.getElementById("poseStatus").innerText = "Buscando cuerpo...";
+  return;
+
+ }
+
+ const lm = results.poseLandmarks;
+
+ if(typeof drawConnectors!=="undefined"){
+
+  drawConnectors(ctx,lm,POSE_CONNECTIONS,{
+   color:"#00d26a",
+   lineWidth:4
+  });
+
+  drawLandmarks(ctx,lm,{
+   color:"#ffffff",
+   lineWidth:2,
+   radius:4
+  });
+
+ }
+
+ document.getElementById("poseStatus").innerText = "Cuerpo detectado";
+
+ const L = {
+  shoulder:lm[11],
+  elbow:lm[13],
+  wrist:lm[15],
+  hip:lm[23],
+  knee:lm[25],
+  ankle:lm[27]
+ };
+
+ const visible =
+  L.shoulder.visibility>.3 &&
+  L.elbow.visibility>.3 &&
+  L.wrist.visibility>.3;
+
+ if(visible){
+
+  const elbowAngle = calcularAngulo(
+   L.shoulder,
+   L.elbow,
+   L.wrist
+  );
+
+  document.getElementById("angleElbow").innerText =
+   elbowAngle+"°";
+
+  const shoulderAngle = calcularAngulo(
+   {x:L.shoulder.x,y:L.shoulder.y-0.2},
+   L.shoulder,
+   L.elbow
+  );
+
+  document.getElementById("angleShoulder").innerText =
+   shoulderAngle+"°";
+
+  document.getElementById("valAngle").innerText =
+   shoulderAngle+"°";
+
+ }
+
+ if(
+  L.hip.visibility>.3 &&
+  L.knee.visibility>.3 &&
+  L.ankle.visibility>.3
+ ){
+
+  const hipAngle = calcularAngulo(
+   L.shoulder,
+   L.hip,
+   L.knee
+  );
+
+  document.getElementById("angleHip").innerText =
+   hipAngle+"°";
+
+ }
+
+ detectarRepeticionBrazo(lm);
+
+ if(socket && socket.connected && pacienteActual && (Date.now()-ultimoEnvioMovimiento)>250){
+
+  ultimoEnvioMovimiento = Date.now();
+
+  socket.emit("patient:movement",{
+
+   cedula:pacienteActual.paciente.documento,
+
+   angles:{
+    shoulder:document.getElementById("angleShoulder").innerText,
+    elbow:document.getElementById("angleElbow").innerText,
+    hip:document.getElementById("angleHip").innerText
+   },
+
+   repetitions:currentRep,
+   timestamp:Date.now()
+
+  });
+
+ }
+}
+
+function detectarRepeticionBrazo(lm){
+
+ if(aiState!=="TERAPIA")return;
+
+ const shoulder = lm[11];
+ const elbow = lm[13];
+ const wrist = lm[15];
+
+ if(
+  shoulder.visibility<.3 ||
+  elbow.visibility<.3 ||
+  wrist.visibility<.3
+ ){
+
+  document.getElementById("poseFeedback").innerText =
+   "Asegúrate de que tu brazo esté visible en la cámara.";
+
+  return;
+ }
+
+ const levantado = wrist.y < shoulder.y-.08;
+
+ if(levantado && !brazoArriba){
+
+  brazoArriba = true;
+  ultimaRepeticion = Date.now();
+
+ }
+
+ if(!levantado && brazoArriba){
+
+  brazoArriba = false;
+
+  if(Date.now()-ultimaRepeticion>350){
+   registrarRepeticion();
+  }
+
+ }
+
+ document.getElementById("poseFeedback").innerText =
+  levantado
+   ? "Movimiento detectado: brazo elevado."
+   : "Mantén una posición cómoda y sigue las instrucciones.";
+
+}
+
+/* =========================================================
+   CONTADOR ILIMITADO DE REPETICIONES
+========================================================= */
+
+function registrarRepeticion(){
+
+ if(aiState!=="TERAPIA")return;
+
+ currentRep++;
+
+ document.getElementById("repCounter").innerText =
+  currentRep;
+
+ document.getElementById("feedbackMessage").innerText =
+  `Movimiento detectado: ${currentRep} repeticiones.`;
+
+ actualizarDialogo(
+  `Repetición ${currentRep}. Continúa a tu ritmo.`
+ );
+
+ const registro = {
+
+  repeticion:currentRep,
+  timestamp:Date.now(),
+
+  anguloHombro:
+   document.getElementById("angleShoulder").innerText,
+
+  anguloCodo:
+   document.getElementById("angleElbow").innerText
+
+ };
+
+ sessionResults.push(registro);
+
+ if(socket && socket.connected && pacienteActual){
+
+  socket.emit("patient:repetition",{
+
+   cedula:pacienteActual.paciente.documento,
+   result:registro
+
+  });
+
+ }
+
+}
+
+/* =========================================================
+   CONTROL DE TERAPIA
+========================================================= */
+
+function iniciarTerapia(){
+
+ if(aiState==="TERAPIA" || aiState==="PREPARANDO")return;
+
+ if(aiState==="PAUSADA"){
+  continuarTerapia();
+  return;
+ }
+
+ if(aiState!=="ESPERANDO")return;
+
+ if(!diaActivoSeleccionado){
+  actualizarDialogo("No tienes una terapia habilitada. Tu médico debe habilitarla.");
+  return;
+ }
+
+ currentRep = 0;
+ sessionResults = [];
+ sesionGuardada = false;
+ brazoArriba = false;
+
+ document.getElementById("repCounter").innerText = currentRep;
+
+ document.getElementById("feedbackMessage").innerText =
+  "Preparando el inicio de la terapia...";
+
+ const dia = diaActivoSeleccionado
+  ? diaActivoSeleccionado.numDia
+  : 1;
+
+ aiState = "PREPARANDO";
+
+ actualizarDialogo("Sigue las siguientes indicaciones");
+
+ hablarIA("Sigue las siguientes indicaciones",()=>{
+
+  if(aiState!=="PREPARANDO")return;
+
+  aiState = "TERAPIA";
+  brazoArriba = false;
+
+  document.getElementById("feedbackMessage").innerText =
+   "Seguimiento corporal activo. Realiza el movimiento indicado.";
+
+  actualizarDialogo(
+   `Comenzamos la terapia del día ${dia}.`
+  );
+
+  if(fbxMixer && animationActions.length){
+
+   animationActions.forEach(action=>{
+    action.reset();
+    action.paused = false;
+    action.play();
+   });
+
+  }
+
+  iniciarConteoVoz();
+
+ });
+
+}
+
+function finalizarTerapia(){
+
+ if(aiState!=="TERAPIA" && aiState!=="PAUSADA"){
+  return;
+ }
+
+ aiState = "REPOSO";
+
+ detenerColaVoz();
+
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+
+ if(fbxMixer){
+  fbxMixer.stopAllAction();
+ }
+
+ const diaActual = diaActivoSeleccionado
+  ? diaActivoSeleccionado.numDia
+  : 1;
+
+ const fin =
+  `Has finalizado la terapia del día ${diaActual}. `+
+  `Realizaste ${currentRep} repeticiones.`;
+
+ document.getElementById("feedbackMessage").innerText =
+  `Sesión finalizada. Total: ${currentRep} repeticiones.`;
+
+ actualizarDialogo(fin);
+
+ if(!sesionGuardada){
+
+  guardarResultadosSesion(diaActual);
+  sesionGuardada = true;
+
+ }
+
+ hablarIA(fin);
+
+}
+
+/* =========================================================
+   GUARDADO Y SINCRONIZACIÓN DE RESULTADOS
+========================================================= */
+
+function guardarResultadosSesion(dia){
+
+ if(!pacienteActual)return;
+
+ const resultado = {
+
+  cedula:pacienteActual.paciente.documento,
+
+  nombre:
+   `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
+
+  dia:dia,
+
+  repeticiones:currentRep,
+
+  resultados:sessionResults,
+
+  fecha:new Date().toISOString()
+
+ };
+
+ const key = `uac_sesiones_${resultado.cedula}`;
+
+ let historial = [];
+
+ try{
+
+  historial = JSON.parse(
+   localStorage.getItem(key) || "[]"
+  );
+
+ }catch(e){
+
+  historial = [];
+
+ }
+
+ historial.push(resultado);
+
+ localStorage.setItem(key,JSON.stringify(historial));
+ refrescarTerapias();
+
+ if(socket && socket.connected){
+
+  socket.emit("patient:session-completed",resultado);
+
+ }
+
+}
+
+/* =========================================================
+   AVATAR 3D
+========================================================= */
+
+function init3DAvatar(){
+
+ const canvas = document.getElementById("avatarCanvas");
+ const container = document.querySelector(".avatar-container");
+
+ if(!canvas || !container || typeof THREE==="undefined"){
+
+  console.error("No se pudo preparar el entorno Three.js.");
+  ocultarCarga();
+  return;
+
+ }
+
+ scene = new THREE.Scene();
+ scene.background = new THREE.Color(0x141422);
+
+ camera = new THREE.PerspectiveCamera(
+  40,
+  container.clientWidth/Math.max(container.clientHeight,1),
+  .1,
+  5000
+ );
+
+ camera.position.set(0,100,380);
+
+ renderer = new THREE.WebGLRenderer({
+
+  canvas:canvas,
+  antialias:true,
+  alpha:true
+
+ });
+
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+
+ renderer.setSize(
+  container.clientWidth,
+  container.clientHeight
+ );
+
+ scene.add(new THREE.AmbientLight(0xffffff,1.8));
+
+ const light = new THREE.DirectionalLight(0xffffff,2);
+
+ light.position.set(200,300,300);
+
+ scene.add(light);
+
+ controls = new THREE.OrbitControls(
+  camera,
+  renderer.domElement
+ );
+
+ controls.target.set(0,80,0);
+ controls.enableDamping = true;
+
+ const fbxLoader = new THREE.FBXLoader();
+
+ fbxLoader.load(
+
+  "./terapia.1.fbx",
+
+  (fbx)=>{
+
+   fbxModel = fbx;
+
+   const box = new THREE.Box3().setFromObject(fbxModel);
+   const center = box.getCenter(new THREE.Vector3());
+   const size = box.getSize(new THREE.Vector3());
+
+   fbxModel.position.x -= center.x;
+   fbxModel.position.y -= box.min.y;
+   fbxModel.position.z -= center.z;
+
+   const maxDim = Math.max(size.x,size.y,size.z);
+
+   if(maxDim>0){
+
+    const scale = 150/maxDim;
+    fbxModel.scale.setScalar(scale);
+
+   }
+
+   scene.add(fbxModel);
+
+   if(fbx.animations && fbx.animations.length>0){
+
+    fbxMixer = new THREE.AnimationMixer(fbxModel);
+
+    fbx.animations.forEach(clip=>{
+
+     const action = fbxMixer.clipAction(clip);
+     animationActions.push(action);
+
     });
 
-    /* Pide al servidor la lista de servidores STUN/TURN */
-    async function cargarConfiguracionIce() {
-      if (iceCargado) return;
-      try {
-        const r = await fetch('/api/ice', { cache: 'no-store' });
-        if (r.ok) {
-          const cfg = await r.json();
-          if (cfg && Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
-            configuracionIce = { iceServers: cfg.iceServers };
-            iceCargado = true;
-          }
-        }
-      } catch (err) {
-        console.warn('No se pudo leer /api/ice, se usa solo STUN:', err);
-      }
-    }
-
-    function mostrarEstadoPaciente(texto) {
-      const estado = document.getElementById('mEstadoLlamada');
-      if (estado) estado.innerText = texto;
-      const p = document.querySelector('#patientFeedPlaceholder p');
-      if (p) p.innerText = texto;
-      const ph = document.getElementById('patientFeedPlaceholder');
-      if (ph && !(streamPaciente && streamPaciente.getVideoTracks().length)) ph.style.display = 'flex';
-    }
-
-    function iniciarConexiónSocketMedico() {
-      const estadoSrv = document.getElementById('serverConnectionStatus');
-
-      if (typeof io === 'undefined') {
-        estadoSrv.innerText = "SERVIDOR: NO DISPONIBLE (abre esta página desde la dirección del servidor Node)";
-        estadoSrv.style.color = "#ff4d4d";
-        return;
-      }
-
-      socket = io();
-
-      socket.on('connect', () => {
-        estadoSrv.innerText = "SERVIDOR: CONECTADO (SOCKET.IO ACTIVO)";
-        estadoSrv.style.color = "#00d26a";
-        socket.emit('doctor:join');
-      });
-
-      socket.on('disconnect', () => {
-        estadoSrv.innerText = "SERVIDOR: DESCONECTADO";
-        estadoSrv.style.color = "#ff4d4d";
-      });
-
-      // Lista de pacientes ya conectados al entrar el médico
-      socket.on('server:patients-online', (lista) => {
-        pacientesEnLinea = new Set((lista || []).map(p => String(p.cedula)));
-        renderizarListaPacientes();
-      });
-
-      // Un paciente entra o sale
-      socket.on('server:patient-online', (d) => {
-        if (!d || !d.cedula) return;
-        if (d.conectado) pacientesEnLinea.add(String(d.cedula));
-        else pacientesEnLinea.delete(String(d.cedula));
-        renderizarListaPacientes();
-      });
-
-      // Alerta SOS del paciente
-      socket.on('patient:sos', (alerta) => {
-        alertaActual = alerta;
-        mostrarNotificacionAlertaMedico(alerta);
-      });
-
-      // Movimiento y repeticiones en vivo
-      socket.on('patient:movement', (d) => {
-        if (!d || !d.cedula) return;
-        ultimasMetricas[String(d.cedula)] = d;
-        if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
-      });
-
-      // Estado completo del paciente (1 vez por segundo)
-      socket.on('patient:state', (d) => {
-        if (!d || !d.cedula) return;
-        ultimasMetricas[String(d.cedula)] = d;
-        ultimoEstadoPaciente[String(d.cedula)] = d;
-        if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
-        Object.keys(espejos).forEach((fid) => {
-          if (espejos[fid].cedula === String(d.cedula)) enviarEstadoAEspejo(fid);
-        });
-      });
-
-      socket.on('patient:repetition', (d) => {
-        console.log('Repetición recibida:', d);
-      });
-
-      socket.on('patient:session-completed', (d) => {
-        console.log('Sesión completada recibida:', d);
-        guardarSesionRecibida(d);
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          document.getElementById('mEstadoLlamada').innerText = 'Sesión completada por el paciente';
-        }
-      });
-
-      // ---- Señalización de la videollamada ----
-      socket.on('server:patient-offline', (d) => {
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          mostrarEstadoPaciente('El paciente no está conectado.');
-          pacienteEnLlamadaActual = null;
-        }
-      });
-
-      socket.on('server:patient-busy', (d) => {
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          mostrarEstadoPaciente('El paciente ya está en llamada con otro médico.');
-          pacienteEnLlamadaActual = null;
-        }
-      });
-
-      socket.on('patient:call-rejected', (d) => {
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          mostrarEstadoPaciente('El paciente rechazó la llamada.');
-          cerrarConexionWebRTC();
-          pacienteEnLlamadaActual = null;
-        }
-      });
-
-      socket.on('patient:call-accepted', (d) => {
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          iniciarOfertaHaciaPaciente();
-        }
-      });
-
-      socket.on('patient:answer', async (d) => {
-        if (!d || String(d.cedula) !== String(pacienteEnLlamadaActual)) return;
-        const pc = peerConnection;
-        if (!pc || pc.signalingState !== 'have-local-offer') return;
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(d.answer));
-          await vaciarCandidatosPendientes(pc);
-        } catch (err) {
-          console.error('Error al procesar la respuesta del paciente:', err);
-          mostrarEstadoPaciente('Error al procesar la respuesta del paciente.');
-        }
-      });
-
-      socket.on('patient:ice-candidate', async (d) => {
-        if (!d || !d.candidate || String(d.cedula) !== String(pacienteEnLlamadaActual)) return;
-        if (peerConnection && peerConnection.remoteDescription) {
-          try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate));
-          } catch (err) {
-            console.warn('Candidato ICE descartado:', err);
-          }
-        } else {
-          candidatosPendientes.push(d.candidate);
-        }
-      });
-
-      socket.on('patient:hangup', (d) => {
-        if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
-          cerrarConexionWebRTC();
-          mostrarEstadoPaciente('El paciente finalizó la llamada.');
-        }
-      });
-    }
-
-    function pintarMetricas(d) {
-      const a = (d && d.angles) || {};
-      document.getElementById('mHombro').innerText = a.shoulder || '--';
-      document.getElementById('mCodo').innerText = a.elbow || '--';
-      document.getElementById('mCadera').innerText = a.hip || '--';
-      document.getElementById('mRep').innerText = (d && d.repetitions != null) ? d.repetitions : 0;
-
-      if (!d) {
-        document.getElementById('mEstadoTerapia').innerText = '--';
-        document.getElementById('mResp').innerText = '--';
-        document.getElementById('mSpO2').innerText = '--';
-        document.getElementById('mTemp').innerText = '--';
-        return;
-      }
-
-      if (d.estado !== undefined) {
-        document.getElementById('mEstadoTerapia').innerText = ETIQUETAS_ESTADO[d.estado] || d.estado;
-      }
-      if (d.vitales) {
-        document.getElementById('mResp').innerText = d.vitales.respiracion || '--';
-        document.getElementById('mSpO2').innerText = d.vitales.saturacion || '--';
-        document.getElementById('mTemp').innerText = d.vitales.temperatura || '--';
-      }
-    }
-
-    function cerrarConexionWebRTC() {
-      if (peerConnection) {
-        peerConnection.ontrack = null;
-        peerConnection.onicecandidate = null;
-        peerConnection.onconnectionstatechange = null;
-        try { peerConnection.close(); } catch (e) {}
-        peerConnection = null;
-      }
-      candidatosPendientes = [];
-      streamPaciente = null;
-      streamAvatarPaciente = null;
-      trAvatar = null;
-      const v = document.getElementById('patientLiveFeedVideo');
-      if (v) v.srcObject = null;
-      const va = document.getElementById('patientAvatarVideo');
-      if (va) va.srcObject = null;
-      const pa = document.getElementById('avatarFeedPlaceholder');
-      if (pa) pa.style.display = 'flex';
-    }
-
-    async function vaciarCandidatosPendientes(pc) {
-      if (!pc || !pc.remoteDescription) return;
-      const lista = candidatosPendientes;
-      candidatosPendientes = [];
-      for (const c of lista) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
-        } catch (err) {
-          console.warn('Candidato ICE descartado:', err);
-        }
-      }
-    }
-
-    /* El paciente aceptó: el médico crea la oferta WebRTC.
-       Si este equipo no tiene cámara o micrófono, participa en modo
-       "solo recibir": ve y escucha al paciente sin enviar nada. */
-    async function iniciarOfertaHaciaPaciente() {
-      const cedula = pacienteEnLlamadaActual;
-      if (!cedula) return;
-
-      try {
-        await cargarConfiguracionIce();
-        cerrarConexionWebRTC();
-
-        const pc = new RTCPeerConnection(configuracionIce);
-        peerConnection = pc;
-
-        if (streamMedicoActivo) {
-          streamMedicoActivo.getTracks().forEach(t => pc.addTrack(t, streamMedicoActivo));
-        }
-
-        ['video', 'audio'].forEach((tipo) => {
-          const yaEnvia = pc.getSenders().some(s => s.track && s.track.kind === tipo);
-          if (!yaEnvia) pc.addTransceiver(tipo, { direction: 'recvonly' });
-        });
-
-
-        pc.ontrack = (event) => {
-          if (trAvatar && event.transceiver === trAvatar) {
-            if (!streamAvatarPaciente) streamAvatarPaciente = new MediaStream();
-            streamAvatarPaciente.addTrack(event.track);
-            const va = document.getElementById('patientAvatarVideo');
-            if (va.srcObject !== streamAvatarPaciente) va.srcObject = streamAvatarPaciente;
-            va.play().catch(() => {});
-            document.getElementById('avatarFeedPlaceholder').style.display = 'none';
-            return;
-          }
-          if (!streamPaciente) streamPaciente = new MediaStream();
-          streamPaciente.addTrack(event.track);
-          const v = document.getElementById('patientLiveFeedVideo');
-          if (v.srcObject !== streamPaciente) v.srcObject = streamPaciente;
-          v.play().catch(() => {});
-          if (event.track.kind === 'video') {
-            document.getElementById('patientFeedPlaceholder').style.display = 'none';
-            asignarCamaraEspejo('espejoFrame');
-          }
-        };
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate && socket && socket.connected) {
-            socket.emit('doctor:ice-candidate', { cedula: cedula, candidate: event.candidate });
-          }
-        };
-
-        pc.onconnectionstatechange = () => {
-          if (peerConnection !== pc) return;
-          const s = pc.connectionState;
-          if (s === 'connected') document.getElementById('mEstadoLlamada').innerText = 'Videollamada conectada';
-          else if (s === 'connecting') document.getElementById('mEstadoLlamada').innerText = 'Conectando video...';
-          else if (s === 'disconnected') document.getElementById('mEstadoLlamada').innerText = 'Conexión inestable...';
-          else if (s === 'failed') mostrarEstadoPaciente('Falló la conexión de video. Entre redes distintas puede hacer falta un servidor TURN.');
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket.emit('doctor:offer', { cedula: cedula, offer: pc.localDescription });
-        document.getElementById('mEstadoLlamada').innerText = 'Oferta enviada, esperando al paciente...';
-      } catch (err) {
-        console.error('Error al crear la oferta:', err);
-        mostrarEstadoPaciente('Error al iniciar la videollamada: ' + err.message);
-      }
-    }
-
-    function mostrarNotificacionAlertaMedico(alerta) {
-      const banner = document.getElementById('emergencyAlertBanner');
-      const textEl = document.getElementById('emergencyAlertText');
-      textEl.innerText = `Paciente: ${alerta.nombre} (Cédula: ${alerta.cedula}) solicita asistencia clínica urgente.`;
-      banner.classList.add('active');
-    }
-
-    function cerrarBannerAlertaMedico() {
-      document.getElementById('emergencyAlertBanner').classList.remove('active');
-    }
-
-    function unirMedicoAUrgencia() {
-      cerrarBannerAlertaMedico();
-      if (!alertaActual || !alertaActual.cedula) return;
-      if (socket && socket.connected) {
-        socket.emit('doctor:alert-acknowledged', { cedula: alertaActual.cedula });
-      }
-      abrirEntradaTerapiaEnVivo(String(alertaActual.cedula));
-    }
-
-    function actualizarModeloTerapia() {
-      const select = document.getElementById('rxRutina');
-      const option = select.options[select.selectedIndex];
-      const modelFile = option ? (option.getAttribute('data-model') || 'terapia.1.fbx') : 'terapia.1.fbx';
-      document.getElementById('modelNameDisplay').innerText = `Archivo 3D vinculado: ${modelFile}`;
-      return modelFile;
-    }
-
-    function calcularEdadAutomatica() {
-      const fechaNac = document.getElementById('patNacimiento').value;
-      const display = document.getElementById('edadCalculadaDisplay');
-      if (!fechaNac) return 0;
-      const birthDate = new Date(fechaNac);
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-      display.innerText = `Edad calculada: ${age} años`;
-      return age;
-    }
-
-    function obtenerBasePacientes() {
-      const data = localStorage.getItem('uac_base_pacientes');
-      return data ? JSON.parse(data) : [];
-    }
-
-    function guardarBasePacientes(lista) {
-      localStorage.setItem('uac_base_pacientes', JSON.stringify(lista));
-    }
-
-    function loginMedico() {
-      const user = document.getElementById('medUser').value.trim();
-      const pin = document.getElementById('medPin').value.trim();
-      
-      if (user === 'Luis.ortega8' && pin === '123456789') {
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('medicoPanel').style.display = 'block';
-        document.getElementById('loginError').style.display = 'none';
-        renderizarListaPacientes();
-      } else {
-        document.getElementById('loginError').style.display = 'block';
-      }
-    }
-
-    function cambiarPestaña(tabId, btn) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      btn.classList.add('active');
-    }
-
-    function guardarPacienteEnBaseDatos() {
-      const cedula = document.getElementById('patDoc').value.trim();
-      if (!cedula) { alert("Ingrese la cédula."); return; }
-
-      const edadCalc = calcularEdadAutomatica();
-      let lista = obtenerBasePacientes();
-      const existingIndex = lista.findIndex(p => p.paciente.documento === cedula);
-      let sesionesPrevias = existingIndex >= 0 ? (lista[existingIndex].sesionesHistorial || []) : [];
-
-      const fichaPaciente = {
-        paciente: {
-          nombres: document.getElementById('patNombre').value.trim(),
-          apellidos: document.getElementById('patApellido').value.trim(),
-          documento: cedula,
-          fechaNacimiento: document.getElementById('patNacimiento').value,
-          edadCalculada: edadCalc,
-          genero: document.getElementById('patGenero').value,
-          dolorEva: parseInt(document.getElementById('patEva').value) || 0
-        },
-        anamnesis: {
-          patologia: document.getElementById('patPatologia').value,
-          lado: document.getElementById('patLado').value,
-          articulacion: document.getElementById('patArticulacion').value,
-          nota: document.getElementById('patNota').value.trim()
-        },
-        programacionMensual: {
-          fechaInicio: document.getElementById('rxFechaInicio').value,
-          fechaFin: document.getElementById('rxFechaFin').value,
-          rutinaId: document.getElementById('rxRutina').value,
-          modelo3D: actualizarModeloTerapia()
-        },
-        sesionesHistorial: sesionesPrevias,
-        apuntesMedico: existingIndex >= 0 ? (lista[existingIndex].apuntesMedico || []) : [],
-        terapias: existingIndex >= 0 ? (lista[existingIndex].terapias || {}) : {}
-      };
-
-      if (existingIndex >= 0) lista[existingIndex] = fichaPaciente;
-      else lista.push(fichaPaciente);
-
-      guardarBasePacientes(lista);
-      localStorage.setItem('uac_historia_clinica', JSON.stringify(fichaPaciente));
-
-      const banner = document.getElementById('authBanner');
-      banner.style.display = 'block';
-      setTimeout(() => banner.style.display = 'none', 3000);
-      renderizarListaPacientes();
-    }
-
-    function renderizarListaPacientes() {
-      const lista = obtenerBasePacientes();
-      document.getElementById('contadorPacientes').innerText = lista.length;
-      const tbody = document.getElementById('tablaPacientesBody');
-      tbody.innerHTML = '';
-
-      if (lista.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#a0a0c0; padding:20px;">No hay pacientes registrados.</td></tr>`;
-        return;
-      }
-
-      lista.forEach((item) => {
-        const p = item.paciente;
-        const a = item.anamnesis;
-        const prog = item.programacionMensual;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><span class="cred-badge">${p.documento}</span></td>
-          <td>${pacientesEnLinea.has(String(p.documento)) ? '<span style="color:#00d26a;" title="Conectado ahora">● </span>' : ''}${p.nombres} ${p.apellidos}</td>
-          <td>${a.patologia} (${a.lado})</td>
-          <td>${prog.fechaInicio} al ${prog.fechaFin}</td>
-          <td><span style="font-family:monospace; color:#00d26a;">${prog.modelo3D || 'terapia.1.fbx'}</span></td>
-          <td><button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirModalHistorialDiagnostico('${p.documento}')">📊 Diagnóstico</button></td>
-          <td><button class="btn-call" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 En Vivo</button> <button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="observarPaciente('${p.documento}')">👁 Observar</button></td>
-          <td><button class="btn-danger" style="padding:6px 10px; font-size:0.75rem;" onclick="eliminarPaciente('${p.documento}')">🗑️</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    /* ---------- Pantalla espejo del paciente ---------- */
-
-    function ajustarEspejo(frameId) {
-      const e = espejos[frameId];
-      if (!e) return;
-      const box = document.getElementById(e.boxId);
-      const f = document.getElementById(frameId);
-      if (!box || !f || !box.clientWidth || !box.clientHeight) return;
-      const s = Math.min(box.clientWidth / 1280, box.clientHeight / 720);
-      f.style.transform = 'scale(' + s + ')';
-      f.style.left = Math.max(0, (box.clientWidth - 1280 * s) / 2) + 'px';
-      f.style.top = Math.max(0, (box.clientHeight - 720 * s) / 2) + 'px';
-    }
-
-    function enviarEstadoAEspejo(frameId) {
-      const e = espejos[frameId];
-      const f = document.getElementById(frameId);
-      if (!e || !f || !f.contentWindow) return;
-      const d = ultimoEstadoPaciente[e.cedula];
-      if (!d) return;
-      f.contentWindow.postMessage({ tipo: 'uac-estado', estado: d }, location.origin);
-    }
-
-    function asignarCamaraEspejo(frameId) {
-      const f = document.getElementById(frameId);
-      if (!f || !streamPaciente) return;
-      try {
-        const v = f.contentDocument && f.contentDocument.getElementById('webcam');
-        if (v && v.srcObject !== streamPaciente) {
-          v.srcObject = streamPaciente;
-          v.play().catch(() => {});
-        }
-      } catch (err) {
-        console.warn('No se pudo mostrar la cámara en la pantalla espejo:', err);
-      }
-    }
-
-    function abrirEspejo(frameId, boxId, cedula) {
-      const f = document.getElementById(frameId);
-      if (!f) return;
-      espejos[frameId] = { cedula: String(cedula), boxId: boxId };
-      f.onload = () => {
-        ajustarEspejo(frameId);
-        enviarEstadoAEspejo(frameId);
-        asignarCamaraEspejo(frameId);
-      };
-      f.src = '/index.html?espejo=' + encodeURIComponent(cedula);
-      setTimeout(() => ajustarEspejo(frameId), 200);
-    }
-
-    function cerrarEspejo(frameId) {
-      delete espejos[frameId];
-      const f = document.getElementById(frameId);
-      if (f) f.src = 'about:blank';
-    }
-
-    function pantallaCompletaEspejo(boxId) {
-      const b = document.getElementById(boxId);
-      if (!b) return;
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      } else if (b.requestFullscreen) {
-        b.requestFullscreen().catch(() => {});
-      }
-    }
-
-    document.addEventListener('fullscreenchange', () => {
-      setTimeout(() => Object.keys(espejos).forEach(ajustarEspejo), 100);
-    });
-    window.addEventListener('resize', () => Object.keys(espejos).forEach(ajustarEspejo));
-
-    /* ---------- Observación en silencio (sin cámara, sin micrófono, sin llamada) ---------- */
-
-    function actualizarEstadoObservacion(cedula) {
-      const el = document.getElementById('observarEstado');
-      if (!pacientesEnLinea.has(String(cedula))) {
-        el.innerText = 'Paciente no conectado';
-        return;
-      }
-      const d = ultimoEstadoPaciente[String(cedula)];
-      el.innerText = d
-        ? `${ETIQUETAS_ESTADO[d.estado] || d.estado} · Repeticiones: ${d.repeticiones != null ? d.repeticiones : 0}`
-        : 'Conectado, esperando datos...';
-    }
-
-    function observarPaciente(cedula) {
-      cedula = String(cedula);
-      const ficha = obtenerBasePacientes().find(p => String(p.paciente.documento) === cedula);
-      const nombre = ficha ? `${ficha.paciente.nombres} ${ficha.paciente.apellidos}` : cedula;
-      document.getElementById('observarTitulo').innerText = `👁 Observando: ${nombre} (${cedula})`;
-      document.getElementById('observarModal').style.display = 'flex';
-      actualizarEstadoObservacion(cedula);
-      abrirEspejo('observarFrame', 'observarBox', cedula);
-    }
-
-    function cerrarObservacion() {
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      cerrarEspejo('observarFrame');
-      document.getElementById('observarModal').style.display = 'none';
-    }
-
-    setInterval(() => {
-      const e = espejos['observarFrame'];
-      if (e) actualizarEstadoObservacion(e.cedula);
-    }, 1000);
-
-    /* ---------- Terapias programadas ---------- */
-
-    function fechaLocalMedico(d) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
-
-    function calcularDiasTerapia(f) {
-      const prog = f.programacionMensual || {};
-      if (!prog.fechaInicio || !prog.fechaFin) return [];
-      const ini = new Date(prog.fechaInicio + 'T00:00:00');
-      const fin = new Date(prog.fechaFin + 'T00:00:00');
-      const total = Math.floor((fin - ini) / 86400000) + 1;
-      const dias = [];
-      for (let i = 0; i < total; i++) {
-        const d = new Date(ini);
-        d.setDate(ini.getDate() + i);
-        dias.push({ dia: i + 1, fecha: fechaLocalMedico(d) });
-      }
-      return dias;
-    }
-
-    function estadoTerapia(f, dia, fechaBase) {
-      const cfg = (f.terapias && f.terapias[dia]) || {};
-      const programada = cfg.programada || fechaBase;
-      const manual = typeof cfg.habilitada === 'boolean';
-      const habilitada = manual ? cfg.habilitada : (programada <= fechaLocalMedico(new Date()));
-      const completada = (f.sesionesHistorial || []).some(
-        s => Number(s.dia) === dia && (!cfg.reabiertaEn || String(s.fecha) > cfg.reabiertaEn)
-      );
-      return { programada, manual, habilitada, completada };
-    }
-
-    function enviarTerapiasAlPaciente(cedula, terapias) {
-      if (socket && socket.connected) {
-        socket.emit('doctor:terapias', { cedula: String(cedula), terapias: terapias });
-      }
-    }
-
-    function modificarTerapia(dia, cambios) {
-      const lista = obtenerBasePacientes();
-      const i = lista.findIndex(p => String(p.paciente.documento) === String(historialCedulaActual));
-      if (i < 0) return;
-      if (!lista[i].terapias) lista[i].terapias = {};
-      lista[i].terapias[dia] = Object.assign({}, lista[i].terapias[dia] || {}, cambios);
-      guardarBasePacientes(lista);
-      enviarTerapiasAlPaciente(historialCedulaActual, lista[i].terapias);
-      renderTerapias(lista[i]);
-    }
-
-    function renderTerapias(f) {
-      const cont = document.getElementById('listaTerapias');
-      cont.innerHTML = '';
-      const dias = calcularDiasTerapia(f);
-      let completadas = 0;
-      let habilitadas = 0;
-
-      dias.forEach((d) => {
-        const est = estadoTerapia(f, d.dia, d.fecha);
-        if (est.completada) completadas++;
-        else if (est.habilitada) habilitadas++;
-
-        const fila = document.createElement('div');
-        fila.style.cssText = 'display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px solid #303050;';
-
-        const nombre = document.createElement('span');
-        nombre.style.cssText = 'width:60px; font-weight:bold;';
-        nombre.textContent = 'Día ' + d.dia;
-
-        const fecha = document.createElement('input');
-        fecha.type = 'date';
-        fecha.value = est.programada;
-        fecha.style.cssText = 'width:150px; padding:4px 6px;';
-        fecha.onchange = () => { if (fecha.value) modificarTerapia(d.dia, { programada: fecha.value }); };
-
-        const chip = document.createElement('span');
-        chip.style.cssText = 'min-width:150px; color:' + (est.completada ? '#00d26a' : est.habilitada ? '#ffd700' : '#a0a0c0') + ';';
-        chip.textContent = (est.completada ? '✅ Completada' : est.habilitada ? '▶ Habilitada' : '🔒 Bloqueada') + (est.manual ? ' (manual)' : ' (por fecha)');
-
-        const botones = [
-          ['Habilitar', 'btn-call', { habilitada: true }],
-          ['Bloquear', 'btn-danger', { habilitada: false }],
-          ['Reabrir', 'btn-info', { habilitada: true, reabiertaEn: new Date().toISOString() }],
-          ['Por fecha', 'btn-secondary', { habilitada: undefined }]
-        ];
-        fila.appendChild(nombre);
-        fila.appendChild(fecha);
-        fila.appendChild(chip);
-        botones.forEach((b) => {
-          const btn = document.createElement('button');
-          btn.className = b[1];
-          btn.style.cssText = 'padding:4px 10px; font-size:0.75rem;';
-          btn.textContent = b[0];
-          btn.onclick = () => modificarTerapia(d.dia, b[2]);
-          fila.appendChild(btn);
-        });
-        cont.appendChild(fila);
-      });
-
-      if (dias.length === 0) cont.textContent = 'Este paciente no tiene programación de terapias.';
-      document.getElementById('terapiasResumenMedico').innerText =
-        dias.length ? `· ${dias.length} terapias · ${completadas} completadas · ${habilitadas} habilitadas` : '';
-    }
-
-    function enviarComandoTerapia(comando) {
-      if (!socket || !socket.connected || !pacienteEnLlamadaActual) {
-        alert('No hay conexión activa con un paciente.');
-        return;
-      }
-      socket.emit('doctor:command', { cedula: pacienteEnLlamadaActual, command: comando });
-      document.getElementById('mEstadoLlamada').innerText = 'Comando enviado: ' + comando;
-    }
-
-    function limpiarFormulario() {
-      ['patNombre', 'patApellido', 'patDoc', 'patNacimiento', 'patEva', 'patNota'].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-      });
-      document.getElementById('edadCalculadaDisplay').innerText = '';
-    }
-
-    /* Guarda en el portal médico la sesión que el paciente termina
-       (solo si este portal está abierto en ese momento) */
-    function guardarSesionRecibida(d) {
-      if (!d || !d.cedula) return;
-      const lista = obtenerBasePacientes();
-      const i = lista.findIndex(p => String(p.paciente.documento) === String(d.cedula));
-      if (i < 0) return;
-      if (!Array.isArray(lista[i].sesionesHistorial)) lista[i].sesionesHistorial = [];
-      if (lista[i].sesionesHistorial.some(s => s.fecha === d.fecha)) return;
-      lista[i].sesionesHistorial.push(d);
-      guardarBasePacientes(lista);
-    }
-
-    function agregarApunteMedico(cedula, texto) {
-      texto = (texto || '').trim();
-      if (!texto) return false;
-      const lista = obtenerBasePacientes();
-      const i = lista.findIndex(p => String(p.paciente.documento) === String(cedula));
-      if (i < 0) return false;
-      if (!Array.isArray(lista[i].apuntesMedico)) lista[i].apuntesMedico = [];
-      lista[i].apuntesMedico.push({ fecha: new Date().toISOString(), texto: texto });
-      guardarBasePacientes(lista);
-      return true;
-    }
-
-    function guardarApunteEnVivo() {
-      const caja = document.getElementById('apunteEnVivo');
-      const estado = document.getElementById('apunteEstado');
-      if (!pacienteEnLlamadaActual) { estado.innerText = 'No hay paciente seleccionado.'; return; }
-      if (agregarApunteMedico(pacienteEnLlamadaActual, caja.value)) {
-        caja.value = '';
-        estado.innerText = '✓ Apunte guardado';
-      } else {
-        estado.innerText = 'Escribe un apunte primero.';
-      }
-      setTimeout(() => { estado.innerText = ''; }, 2500);
-    }
-
-    function abrirHistorialDesdeLlamada() {
-      if (pacienteEnLlamadaActual) abrirModalHistorialDiagnostico(pacienteEnLlamadaActual);
-    }
-
-    function guardarApunteHistorial() {
-      const caja = document.getElementById('apunteHistorial');
-      const estado = document.getElementById('apunteHistorialEstado');
-      if (agregarApunteMedico(historialCedulaActual, caja.value)) {
-        caja.value = '';
-        estado.innerText = '✓ Apunte guardado';
-        const f = obtenerBasePacientes().find(p => String(p.paciente.documento) === String(historialCedulaActual));
-        if (f) renderApuntes(f);
-      } else {
-        estado.innerText = 'Escribe un apunte primero.';
-      }
-      setTimeout(() => { estado.innerText = ''; }, 2500);
-    }
-
-    function crearCeldaHistoria(etiqueta, valor) {
-      const d = document.createElement('div');
-      const l = document.createElement('div');
-      l.style.cssText = 'font-size:0.7rem; color:#a0a0c0; text-transform:uppercase;';
-      l.textContent = etiqueta;
-      const v = document.createElement('div');
-      v.style.cssText = 'color:#fff;';
-      v.textContent = (valor === undefined || valor === null || valor === '') ? '—' : valor;
-      d.appendChild(l);
-      d.appendChild(v);
-      return d;
-    }
-
-    function renderHistoriaClinica(f) {
-      const g = document.getElementById('historiaClinicaGrid');
-      g.innerHTML = '';
-      const p = f.paciente || {};
-      const a = f.anamnesis || {};
-      const r = f.programacionMensual || {};
-      const celdas = [
-        ['Nombre', `${p.nombres || ''} ${p.apellidos || ''}`.trim()],
-        ['Documento', p.documento],
-        ['Fecha de nacimiento', p.fechaNacimiento],
-        ['Edad', p.edadCalculada != null ? p.edadCalculada + ' años' : ''],
-        ['Género', p.genero],
-        ['Dolor basal (EVA 0-10)', p.dolorEva],
-        ['Patología', a.patologia],
-        ['Lado afectado', a.lado],
-        ['Articulación', a.articulacion],
-        ['Programación', r.fechaInicio ? `${r.fechaInicio} al ${r.fechaFin}` : ''],
-        ['Rutina', r.rutinaId],
-        ['Modelo 3D', r.modelo3D]
-      ];
-      celdas.forEach(c => g.appendChild(crearCeldaHistoria(c[0], c[1])));
-      const nota = crearCeldaHistoria('Nota clínica inicial', a.nota);
-      nota.style.gridColumn = '1 / -1';
-      nota.lastChild.style.whiteSpace = 'pre-wrap';
-      g.appendChild(nota);
-    }
-
-    function renderSesiones(f) {
-      const sesiones = (f.sesionesHistorial || []).slice().sort((x, y) => String(x.fecha).localeCompare(String(y.fecha)));
-      const totalReps = sesiones.reduce((s, x) => s + (Number(x.repeticiones) || 0), 0);
-
-      document.getElementById('kpiTotalSesiones').innerText = sesiones.length;
-      document.getElementById('kpiMinutosTotales').innerText = totalReps;
-      document.getElementById('kpiPrecisionGlobal').innerText = '—';
-      document.getElementById('kpiRatioEjecucion').innerText = '—';
-
-      const evol = document.getElementById('diagnosticoEvolucionRom');
-      if (sesiones.length === 0) {
-        evol.innerText = 'Aún no hay sesiones registradas en este portal.';
-      } else if (sesiones.length === 1) {
-        evol.innerText = `Una sesión registrada: ${sesiones[0].repeticiones} repeticiones (día ${sesiones[0].dia}).`;
-      } else {
-        const primera = sesiones[0].repeticiones;
-        const ultima = sesiones[sesiones.length - 1].repeticiones;
-        const promedio = (totalReps / sesiones.length).toFixed(1);
-        evol.innerText = `Primera sesión: ${primera} repeticiones. Última: ${ultima}. Promedio: ${promedio} por sesión.`;
-      }
-
-      document.getElementById('diagnosticoTecnicaIa').innerText =
-        'La evaluación automática de la técnica todavía no está disponible. Usa el seguimiento en vivo y tus apuntes.';
-
-      const tbody = document.getElementById('tablaSesionesDetalle');
-      tbody.innerHTML = '';
-      if (sesiones.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 6;
-        td.style.cssText = 'text-align:center; color:#a0a0c0; padding:14px;';
-        td.textContent = 'Sin sesiones registradas todavía.';
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-      }
-      sesiones.forEach((s, idx) => {
-        const tr = document.createElement('tr');
-        const fecha = s.fecha ? new Date(s.fecha).toLocaleString('es-CO') : '—';
-        const valores = [
-          `Sesión ${idx + 1} — ${fecha} (día ${s.dia != null ? s.dia : '—'})`,
-          (f.programacionMensual && f.programacionMensual.rutinaId) || '—',
-          '—',
-          '—',
-          `${s.repeticiones != null ? s.repeticiones : 0} repeticiones`,
-          '—'
-        ];
-        valores.forEach((v) => {
-          const td = document.createElement('td');
-          td.textContent = v;
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-    }
-
-    function renderApuntes(f) {
-      const cont = document.getElementById('listaApuntes');
-      cont.innerHTML = '';
-      const apuntes = (f.apuntesMedico || []).slice().reverse();
-      if (apuntes.length === 0) {
-        const p = document.createElement('div');
-        p.style.color = '#a0a0c0';
-        p.textContent = 'Aún no hay apuntes.';
-        cont.appendChild(p);
-        return;
-      }
-      apuntes.forEach((a) => {
-        const item = document.createElement('div');
-        item.style.cssText = 'border-bottom:1px solid #303050; padding:6px 0;';
-        const fecha = document.createElement('div');
-        fecha.style.cssText = 'font-size:0.7rem; color:#a0a0c0;';
-        fecha.textContent = new Date(a.fecha).toLocaleString('es-CO');
-        const texto = document.createElement('div');
-        texto.style.whiteSpace = 'pre-wrap';
-        texto.textContent = a.texto;
-        item.appendChild(fecha);
-        item.appendChild(texto);
-        cont.appendChild(item);
-      });
-    }
-
-    function abrirModalHistorialDiagnostico(cedula) {
-      const lista = obtenerBasePacientes();
-      const found = lista.find(p => String(p.paciente.documento) === String(cedula));
-      if (!found) return;
-      historialCedulaActual = String(cedula);
-      document.getElementById('historialModalTitle').innerText = `Historial — ${found.paciente.nombres} ${found.paciente.apellidos}`;
-      renderHistoriaClinica(found);
-      renderSesiones(found);
-      renderApuntes(found);
-      renderTerapias(found);
-      document.getElementById('historialClinicoModal').style.display = 'flex';
-    }
-
-    function cerrarModalHistorial() {
-      document.getElementById('historialClinicoModal').style.display = 'none';
-    }
-
-    /* Obtiene cámara y micrófono del médico. Si este equipo no tiene
-       cámara, intenta solo micrófono; si tampoco, queda en modo solo-recibir. */
-    async function prepararMediosMedico() {
-      if (streamMedicoActivo) return;
-
-      const docVid = document.getElementById('doctorLiveVideo');
-      const docOverlay = document.getElementById('doctorCallOverlay');
-      const btnToggle = document.getElementById('btnToggleMedicoCam');
-
-      let stream = null;
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const intentos = [
-          { video: true, audio: true },
-          { video: false, audio: true },
-          { video: true, audio: false }
-        ];
-        for (const c of intentos) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(c);
-            break;
-          } catch (err) {
-            console.warn('Medios del médico no disponibles con', JSON.stringify(c), err.name);
-          }
-        }
-      }
-
-      streamMedicoActivo = stream;
-
-      if (stream && stream.getVideoTracks().length) {
-        docVid.srcObject = stream;
-        docVid.style.display = 'block';
-        docOverlay.style.display = 'none';
-        btnToggle.innerText = '🔇 Apagar Cámara Médico';
-      } else {
-        docVid.style.display = 'none';
-        docOverlay.style.display = 'block';
-        docOverlay.innerHTML = '<p>Este equipo no tiene cámara disponible.<br>Verás y escucharás al paciente' +
-          (stream ? ' y él te escuchará a ti.' : ' sin enviar audio ni video.') + '</p>';
-      }
-    }
-
-    function colgarLlamadaActual() {
-      if (socket && socket.connected && pacienteEnLlamadaActual) {
-        socket.emit('doctor:hangup', { cedula: pacienteEnLlamadaActual });
-      }
-      cerrarConexionWebRTC();
-    }
-
-    async function abrirEntradaTerapiaEnVivo(cedula) {
-      cedula = String(cedula);
-
-      if (!socket || !socket.connected) {
-        alert('Sin conexión con el servidor.\n\nDirección actual de esta página: ' + location.origin + '\nDebe ser http://localhost:3000 (con el servidor encendido con npm start).');
-        return;
-      }
-
-      // Ya hay una llamada en curso con este mismo paciente: solo mostrar la ventana
-      if (peerConnection && pacienteEnLlamadaActual === cedula) {
-        document.getElementById('liveCallModal').style.display = 'flex';
-        return;
-      }
-
-      if (pacienteEnLlamadaActual && pacienteEnLlamadaActual !== cedula) {
-        colgarLlamadaActual();
-      }
-
-      pacienteEnLlamadaActual = cedula;
-
-      const ficha = obtenerBasePacientes().find(p => String(p.paciente.documento) === cedula);
-      let nombre = 'Paciente';
-      if (ficha) nombre = `${ficha.paciente.nombres} ${ficha.paciente.apellidos}`;
-      else if (alertaActual && String(alertaActual.cedula) === cedula && alertaActual.nombre) nombre = alertaActual.nombre;
-
-      document.getElementById('callPatientTitle').innerText = `Paciente: ${nombre} (${cedula})`;
-      document.getElementById('liveCallModal').style.display = 'flex';
-
-      pintarMetricas(ultimasMetricas[cedula] || null);
-      abrirEspejo('espejoFrame', 'espejoBox', cedula);
-      mostrarEstadoPaciente('Preparando equipo médico...');
-      await prepararMediosMedico();
-
-      if (pacienteEnLlamadaActual !== cedula) return; // se cerró mientras tanto
-
-      mostrarEstadoPaciente('Llamando al paciente... debe aceptar en la pantalla del paciente.');
-      socket.emit('doctor:call-request', { cedula: cedula });
-    }
-
-    /* Activa / oculta la cámara del médico sin cortar la llamada */
-    async function alternarVistaMedicoEnVivo() {
-      const docVid = document.getElementById('doctorLiveVideo');
-      const docOverlay = document.getElementById('doctorCallOverlay');
-      const btnToggle = document.getElementById('btnToggleMedicoCam');
-
-      const pista = streamMedicoActivo ? streamMedicoActivo.getVideoTracks()[0] : null;
-
-      if (!pista) {
-        alert('Este equipo no tiene cámara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
-        return;
-      }
-
-      pista.enabled = !pista.enabled;
-
-      if (pista.enabled) {
-        docVid.style.display = 'block';
-        docOverlay.style.display = 'none';
-        btnToggle.innerText = '🔇 Apagar Cámara Médico';
-      } else {
-        docVid.style.display = 'none';
-        docOverlay.style.display = 'block';
-        docOverlay.innerHTML = '<p>Cámara médica apagada.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
-        btnToggle.innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
-      }
-    }
-
-    function cerrarSesionEnVivo() {
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-      cerrarEspejo('espejoFrame');
-      colgarLlamadaActual();
-
-      if (streamMedicoActivo) {
-        streamMedicoActivo.getTracks().forEach(t => t.stop());
-        streamMedicoActivo = null;
-      }
-
-      const docVid = document.getElementById('doctorLiveVideo');
-      docVid.srcObject = null;
-      docVid.style.display = 'none';
-
-      const docOverlay = document.getElementById('doctorCallOverlay');
-      docOverlay.style.display = 'block';
-      docOverlay.innerHTML = '<p>Cámara médica inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
-      document.getElementById('btnToggleMedicoCam').innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
-
-      pacienteEnLlamadaActual = null;
-      mostrarEstadoPaciente('Esperando flujo del paciente...');
-      document.getElementById('mEstadoLlamada').innerText = 'Sin llamada';
-      document.getElementById('liveCallModal').style.display = 'none';
-    }
-
-    function eliminarPaciente(cedula) {
-      if (!confirm("¿Eliminar paciente?")) return;
-      let lista = obtenerBasePacientes().filter(p => p.paciente.documento !== cedula);
-      guardarBasePacientes(lista);
-      renderizarListaPacientes();
-    }
-  </script>
+   }
+
+   document.getElementById("avatarLoadMessage").innerText =
+    "Avatar cargado correctamente.";
+
+   ocultarCarga();
+
+  },
+
+  (progress)=>{
+
+   if(progress.total){
+
+    const percent = Math.round(
+     progress.loaded/progress.total*100
+    );
+
+    document.getElementById("avatarLoadMessage").innerText =
+     `Cargando avatar: ${percent}%`;
+
+   }
+
+  },
+
+  (error)=>{
+
+   console.error("Error al cargar terapia.1.fbx:",error);
+
+   document.getElementById("avatarLoadMessage").innerText =
+    "No se pudo cargar terapia.1.fbx. Revisa que esté en la misma carpeta.";
+
+   ocultarCarga();
+
+  }
+
+ );
+
+ window.addEventListener("resize",ajustarVisor3D);
+
+}
+
+function ajustarVisor3D(){
+
+ const container = document.querySelector(".avatar-container");
+
+ if(!renderer || !camera || !container)return;
+
+ const width = container.clientWidth;
+ const height = Math.max(container.clientHeight,1);
+
+ camera.aspect = width/height;
+ camera.updateProjectionMatrix();
+
+ renderer.setSize(width,height);
+
+}
+
+function ocultarCarga(){
+
+ const overlay = document.getElementById("loadingOverlay");
+
+ if(overlay){
+
+  overlay.style.opacity = "0";
+
+  setTimeout(()=>{
+   overlay.style.display = "none";
+  },500);
+
+ }
+
+}
+
+function animate(){
+
+ requestAnimationFrame(animate);
+
+ const delta = clock.getDelta();
+
+ if(fbxMixer){
+  fbxMixer.update(delta);
+ }
+
+ if(controls){
+  controls.update();
+ }
+
+ if(renderer && scene && camera){
+  renderer.render(scene,camera);
+ }
+
+}
+
+/* =========================================================
+   MQTT: SIGNOS VITALES DESDE EL ESP32
+   ESP32 -> broker.emqx.io -> esta página. Los valores se escriben en
+   los mismos elementos del panel (respiratoryRate, oxygenLevel,
+   bodyTemperature), así enviarEstadoPaciente() ya se los manda al
+   médico por Socket.IO sin tocar nada más.
+========================================================= */
+
+const MQTT_URL = "wss://broker.emqx.io:8084/mqtt";
+const MQTT_TOPIC = "miproyecto-8472/sensores/datos";
+
+let mqttClient = null;
+let mqttCampos = "";
+let timerEdadVitales = null;
+let vitalesPendientes = []; // lecturas que no se pudieron enviar por falta de conexión
+
+/* Último valor conocido de cada signo vital. El ESP32 envía cada cierto
+   tiempo (p. ej. 1 minuto): el valor se QUEDA en pantalla hasta que
+   llegue uno nuevo, y entonces se actualiza. */
+const ultimoVital = {pulso:null,respiracion:null,saturacion:null,temperatura:null,t:0};
+
+// Nombres de campo aceptados (se comparan sin mayúsculas, tildes ni guiones)
+const CAMPOS_VITALES = {
+ pulso:["frecuencia_cardiaca","frecuenciaCardiaca","frecuencia_cardíaca","frecuencia cardiaca","pulso","fc","bpm","hr","heart_rate","heartRate","heartrate","ritmo_cardiaco","latidos"],
+ respiracion:["frecuencia_respiratoria","frecuenciaRespiratoria","frecuencia respiratoria","respiracion","respiración","resp","fr","rr","respiratory_rate","respiratoryRate","resp_rate","rpm"],
+ saturacion:["spo2","SpO2","sp_o2","saturacion","saturación","saturacion_oxigeno","saturacionOxigeno","oxigeno","oxígeno","oxygen","o2","sat"],
+ temperatura:["temperatura","temp","temperature","temperatura_corporal","body_temp","bodyTemperature","tempC","temp_c"]
+};
+
+function normClave(k){
+ return String(k).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+}
+
+// Aplana el JSON (también lee objetos anidados, p. ej. {"vitales":{"spo2":97}})
+function aplanarJson(obj,out,prof){
+ out = out || {};
+ prof = prof || 0;
+ if(!obj || typeof obj !== "object") return out;
+ for(const k in obj){
+  const v = obj[k];
+  if(v && typeof v === "object" && !Array.isArray(v) && prof < 3){
+   aplanarJson(v,out,prof+1);
+  }else{
+   out[normClave(k)] = v;
+  }
+ }
+ return out;
+}
+
+function leerNumero(plano,claves){
+ for(const k of claves){
+  const v = plano[normClave(k)];
+  if(v !== undefined && v !== null && v !== ""){
+   const n = Number(String(v).replace(",","."));
+   if(Number.isFinite(n)) return n;
+  }
+ }
+ return null;
+}
+
+function pintarVital(id,valor,unidad,decimales){
+ const el = document.getElementById(id);
+ if(!el) return;
+ el.innerText = (valor === null || valor === undefined)
+  ? "No disponible"
+  : `${valor.toFixed(decimales)} ${unidad}`;
+}
+
+function repintarVitales(){
+ pintarVital("heartRate",ultimoVital.pulso,"lpm",0);
+ pintarVital("respiratoryRate",ultimoVital.respiracion,"rpm",0);
+ pintarVital("oxygenLevel",ultimoVital.saturacion,"%",0);
+ pintarVital("bodyTemperature",ultimoVital.temperatura,"°C",1);
+}
+
+function limpiarVitales(){
+ ultimoVital.pulso = null;
+ ultimoVital.respiracion = null;
+ ultimoVital.saturacion = null;
+ ultimoVital.temperatura = null;
+ ultimoVital.t = 0;
+ repintarVitales();
+}
+
+function estadoMqtt(texto){
+ const el = document.getElementById("mqttStatus");
+ if(el) el.innerText = "Sensores: " + texto;
+}
+
+function textoEdad(ms){
+ const s = Math.max(0,Math.round(ms/1000));
+ if(s < 60) return `hace ${s} s`;
+ const m = Math.floor(s/60);
+ if(m < 60) return `hace ${m} min`;
+ return `hace ${Math.floor(m/60)} h`;
+}
+
+function actualizarEdadVitales(){
+ if(!ultimoVital.t) return;
+ estadoMqtt(`último dato ${textoEdad(Date.now()-ultimoVital.t)}`);
+}
+
+function numeroDeElemento(id){
+ const el = document.getElementById(id);
+ if(!el) return null;
+ const n = parseFloat(String(el.innerText).replace(",","."));
+ return Number.isFinite(n) ? n : null;
+}
+
+function construirPayloadVitales(origen,valores){
+ return {
+  t:Date.now(),
+  pulso:valores.pulso,
+  respiracion:valores.respiracion,
+  saturacion:valores.saturacion,
+  temperatura:valores.temperatura,
+  angulos:{
+   hombro:numeroDeElemento("angleShoulder"),
+   codo:numeroDeElemento("angleElbow"),
+   cadera:numeroDeElemento("angleHip")
+  },
+  estado:aiState,
+  dia:diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1,
+  repeticiones:currentRep,
+  origen:origen
+ };
+}
+
+/* Envía la lectura al servidor, que la guarda en el historial del paciente
+   y se la muestra al médico. Si no hay conexión, queda en cola. */
+function enviarVitalesAlServidor(origen,valores){
+ if(!pacienteActual) return;
+
+ const payload = construirPayloadVitales(origen,valores);
+
+ if(socket && socket.connected){
+  socket.emit("patient:vitals",payload);
+ }else{
+  vitalesPendientes.push(payload);
+  if(vitalesPendientes.length > 200) vitalesPendientes.shift();
+ }
+}
+
+function vaciarVitalesPendientes(){
+ if(!socket || !socket.connected) return;
+ const cola = vitalesPendientes;
+ vitalesPendientes = [];
+ cola.forEach(p=>socket.emit("patient:vitals",p));
+}
+
+function iniciarMQTT(){
+
+ if(typeof mqtt === "undefined"){
+  estadoMqtt("librería MQTT no cargada");
+  return;
+ }
+
+ if(mqttClient) return; // evita conexiones duplicadas
+
+ mqttClient = mqtt.connect(MQTT_URL,{
+  clientId:"paciente-web-" + Math.random().toString(16).slice(2,10),
+  reconnectPeriod:3000,
+  connectTimeout:10000
+ });
+
+ mqttClient.on("connect",()=>{
+  estadoMqtt(ultimoVital.t ? "conectado" : "conectado, esperando datos...");
+  mqttClient.subscribe(MQTT_TOPIC);
+ });
+
+ mqttClient.on("reconnect",()=>estadoMqtt("reconectando..."));
+
+ // Al perder conexión NO se borran los valores: se conservan los últimos
+ mqttClient.on("close",()=>{
+  estadoMqtt(ultimoVital.t ? "desconectado (se conserva el último dato)" : "desconectado");
+ });
+
+ mqttClient.on("error",(e)=>{
+  console.error("MQTT:",e);
+  estadoMqtt("error de conexión");
+ });
+
+ mqttClient.on("message",(topic,message)=>{
+
+  let d;
+  try{
+   d = JSON.parse(message.toString());
+  }catch(e){
+   console.warn("MQTT: mensaje que no es JSON:",message.toString());
+   return;
+  }
+
+  const plano = aplanarJson(d);
+  console.log("MQTT recibido:",d);
+
+  // Solo se actualiza lo que llegó en este mensaje; lo demás se conserva
+  const nuevos = {
+   pulso:leerNumero(plano,CAMPOS_VITALES.pulso),
+   respiracion:leerNumero(plano,CAMPOS_VITALES.respiracion),
+   saturacion:leerNumero(plano,CAMPOS_VITALES.saturacion),
+   temperatura:leerNumero(plano,CAMPOS_VITALES.temperatura)
+  };
+
+  mqttCampos = Object.keys(plano).join(", ");
+  const estadoEl = document.getElementById("mqttStatus");
+  if(estadoEl) estadoEl.title = "Campos recibidos: " + mqttCampos;
+
+  const hayAlguno = Object.values(nuevos).some(v=>v !== null);
+
+  if(!hayAlguno){
+   estadoMqtt("llegó un mensaje sin campos reconocidos (" + mqttCampos + ")");
+   return;
+  }
+
+  Object.keys(nuevos).forEach(k=>{
+   if(nuevos[k] !== null) ultimoVital[k] = nuevos[k];
+  });
+  ultimoVital.t = Date.now();
+
+  repintarVitales();
+  actualizarEdadVitales();
+
+  enviarVitalesAlServidor("sensor",nuevos);
+
+ });
+
+ if(timerEdadVitales) clearInterval(timerEdadVitales);
+ timerEdadVitales = setInterval(actualizarEdadVitales,1000);
+
+}
+
+/* =========================================================
+   CONEXIÓN CON EL SERVIDOR COMPARTIDO
+========================================================= */
+
+function iniciarConexionServidor(){
+
+ if(typeof io==="undefined"){
+
+  document.getElementById("connectionStatus").innerText =
+   "Servidor: no conectado (falta servidor compartido)";
+
+  return;
+
+ }
+
+ socket = io();
+
+ if(timerEstadoPaciente){
+  clearInterval(timerEstadoPaciente);
+ }
+ timerEstadoPaciente = setInterval(enviarEstadoPaciente,500);
+
+ // Mientras la terapia está en curso, cada minuto se guarda una instantánea
+ // (últimos signos vitales + ángulos) en el historial clínico
+ if(timerInstantaneaTerapia){
+  clearInterval(timerInstantaneaTerapia);
+ }
+ timerInstantaneaTerapia = setInterval(()=>{
+  if(aiState==="TERAPIA"){
+   enviarVitalesAlServidor("terapia",ultimoVital);
+  }
+ },60000);
+
+ socket.on("connect",()=>{
+
+  document.getElementById("connectionStatus").innerText =
+   "Servidor: conectado";
+
+  socket.emit("patient:join",{
+
+   cedula:pacienteActual.paciente.documento,
+
+   nombre:
+    `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`
+
+  });
+
+  vaciarVitalesPendientes();
+
+ });
+
+ socket.on("disconnect",()=>{
+
+  document.getElementById("connectionStatus").innerText =
+   "Servidor: desconectado";
+
+ });
+
+ socket.on("doctor:call-request",()=>{
+  mostrarAvisoMedico("El médico se ha conectado a tu sesión.");
+  aceptarLlamadaEntrante();
+ });
+
+ socket.on("doctor:joined",()=>{
+  document.getElementById("doctorStatusLabel").innerText =
+   "El especialista se ha conectado.";
+ });
+
+ socket.on("doctor:offer",async(data)=>{
+  await recibirOferta(data.offer);
+ });
+
+ socket.on("doctor:ice-candidate",async(data)=>{
+  if(!data || !data.candidate) return;
+
+  if(peerConnection && peerConnection.remoteDescription){
+   try{
+    await peerConnection.addIceCandidate(
+     new RTCIceCandidate(data.candidate)
+    );
+   }catch(error){
+    console.error(error);
+   }
+  }else{
+   candidatosPendientes.push(data.candidate);
+  }
+ });
+
+ socket.on("doctor:hangup",()=>{
+  finalizarLlamadaLocal("El médico finalizó la llamada.");
+ });
+
+ // El médico habilita, bloquea o programa terapias
+ socket.on("doctor:terapias",(data)=>{
+  if(data && data.terapias){
+   aplicarTerapiasDelMedico(data.terapias);
+  }
+ });
+
+ // Control de la terapia por parte del médico
+ socket.on("doctor:command",(data)=>{
+  if(data && data.command){
+   ejecutarComandoTerapia(data.command,"medico");
+  }
+ });
+
+ socket.on("doctor:alert-acknowledged",()=>{
+  document.getElementById("doctorStatusLabel").innerText =
+   "El médico confirmó la solicitud.";
+  actualizarDialogo("El médico ha confirmado tu solicitud de ayuda.");
+  hablarIA("El médico ha confirmado tu solicitud de ayuda.");
+ });
+
+}
+
+/* =========================================================
+   SOS MÉDICO
+========================================================= */
+
+function simularAlertaClinica(){
+
+ if(!pacienteActual){
+  alert("Primero debes iniciar sesión.");
+  return;
+ }
+
+ aiState = "ALERTA_MEDICA";
+
+ const alerta = {
+  cedula:pacienteActual.paciente.documento,
+  nombre:`${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
+  timestamp:Date.now(),
+  estado:"SOLICITADA",
+  tipo:"SOLICITUD_DE_AYUDA"
+ };
+
+ actualizarDialogo("Has solicitado ayuda médica. Esperando confirmación del especialista.");
+ hablarIA("Has solicitado ayuda médica. Estamos enviando tu solicitud.");
+ document.getElementById("feedbackMessage").innerText = "Solicitud de ayuda enviada.";
+ document.getElementById("doctorEmergencyPanel").classList.add("active");
+
+ doctorSecondsRemaining = 600;
+ iniciarTemporizadorMedico();
+
+ localStorage.setItem("uac_alerta_activa",JSON.stringify(alerta));
+
+ if(socket && socket.connected){
+  socket.emit("patient:sos",alerta);
+ }
+}
+
+function iniciarTemporizadorMedico(){
+
+ if(doctorTimerInterval){
+  clearInterval(doctorTimerInterval);
+ }
+
+ doctorTimerInterval = setInterval(()=>{
+
+  doctorSecondsRemaining--;
+
+  const mins = Math.floor(doctorSecondsRemaining/60);
+  const secs = doctorSecondsRemaining%60;
+
+  document.getElementById("doctorTimerLabel").innerText =
+   `Tiempo de espera: ${String(mins).padStart(2,"0")}:${String(secs).padStart(2,"0")}`;
+
+  if(doctorSecondsRemaining<=0){
+   clearInterval(doctorTimerInterval);
+   document.getElementById("doctorTimerLabel").innerText = "Tiempo de espera cumplido";
+  }
+
+ },1000);
+
+}
+
+/* =========================================================
+   VIDEOLLAMADA WEBRTC
+========================================================= */
+
+function mostrarAvisoMedico(texto,temporal){
+ const el = document.getElementById("avisoMedico");
+ document.getElementById("avisoMedicoTexto").innerText = texto;
+ el.style.display = "block";
+
+ if(timerAvisoMedico){
+  clearTimeout(timerAvisoMedico);
+  timerAvisoMedico = null;
+ }
+
+ if(temporal){
+  timerAvisoMedico = setTimeout(()=>{
+   if(peerConnection){
+    document.getElementById("avisoMedicoTexto").innerText =
+     "El médico está conectado a tu sesión.";
+   }
+  },5000);
+ }
+}
+
+function ocultarAvisoMedico(){
+ if(timerAvisoMedico){
+  clearTimeout(timerAvisoMedico);
+  timerAvisoMedico = null;
+ }
+ const el = document.getElementById("avisoMedico");
+ if(el) el.style.display = "none";
+}
+
+/* Pista de video del avatar 3D (lo que el paciente ve en su pantalla) */
+function capturarDomEspejo(){
+ const ids = [
+  "repCounter","feedbackMessage","speechText","poseFeedback",
+  "angleShoulder","angleElbow","angleHip","valAngle","poseStatus",
+  "heartRate","respiratoryRate","oxygenLevel","bodyTemperature","terapiasResumen"
+ ];
+
+ const datos = {};
+
+ ids.forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) datos[id] = el.innerText;
+ });
+
+ return datos;
+}
+
+function iniciarModoEspejo(cedula){
+
+ document.body.classList.add("espejo");
+
+ let ficha = null;
+
+ try{
+  const base = JSON.parse(localStorage.getItem("uac_base_pacientes") || "[]");
+  ficha = base.find(p=>p.paciente && String(p.paciente.documento)===String(cedula)) || null;
+ }catch(e){
+  ficha = null;
+ }
+
+ if(!ficha || !ficha.programacionMensual){
+  document.body.innerHTML =
+   '<div style="color:#fff;font-family:Arial,sans-serif;padding:30px;">No se encontró la ficha de este paciente en el portal médico.</div>';
+  return;
+ }
+
+ pacienteActual = ficha;
+
+ document.getElementById("patientLoginSection").style.display = "none";
+ document.getElementById("patientAppContainer").style.display = "flex";
+
+ const p = ficha.paciente;
+ const prog = ficha.programacionMensual;
+
+ document.getElementById("telemetryName").innerText = `${p.nombres || ""} ${p.apellidos || ""}`;
+ document.getElementById("dispNombre").innerText = `${p.nombres || ""} ${p.apellidos || ""}`;
+ document.getElementById("dispCedula").innerText = p.documento || "-";
+ document.getElementById("dispEdad").innerText = `${p.edadCalculada || 0} años`;
+ document.getElementById("dispInicio").innerText = prog.fechaInicio;
+ document.getElementById("dispFin").innerText = prog.fechaFin;
+
+ const dStart = new Date(prog.fechaInicio+"T00:00:00");
+ const dEnd = new Date(prog.fechaFin+"T00:00:00");
+ const totalDays = Math.floor((dEnd-dStart)/86400000)+1;
+
+ cargarTerapiasConfig(ficha);
+ renderizarSecuenciaDias(totalDays,dStart);
+
+ setInterval(sincronizarAnimacionEspejo,500);
+
+ try{
+  init3DAvatar();
+ }catch(error){
+  console.error("Espejo: no se pudo iniciar el avatar 3D:",error);
+ }
+}
+
+function recibirEstadoEspejo(evento){
+
+ if(evento.origin !== location.origin) return;
+
+ const msg = evento.data;
+ if(!msg || msg.tipo !== "uac-estado" || !msg.estado) return;
+
+ const d = msg.estado;
+
+ if(d.dom){
+  for(const id in d.dom){
+   const el = document.getElementById(id);
+   if(el) el.innerText = d.dom[id];
+  }
+ }
+
+ if(d.diasHtml){
+  const cont = document.getElementById("daysSequenceContainer");
+  if(cont) cont.innerHTML = d.diasHtml;
+ }
+
+ if(d.estado !== undefined){
+  espejoEstado = d.estado;
+ }
+
+ sincronizarAnimacionEspejo();
+}
+
+/* El avatar se mueve igual que en la pantalla del paciente:
+   corre mientras la terapia está en curso, se congela en pausa */
+function sincronizarAnimacionEspejo(){
+
+ if(!fbxMixer || !animationActions.length) return;
+
+ if(espejoEstado==="TERAPIA"){
+
+  if(!espejoAnimando){
+   animationActions.forEach(action=>{
+    action.reset();
+    action.paused = false;
+    action.play();
+   });
+   espejoAnimando = true;
+  }else{
+   animationActions.forEach(action=>{ action.paused = false; });
+  }
+
+ }else if(espejoEstado==="PAUSADA"){
+
+  animationActions.forEach(action=>{ action.paused = true; });
+
+ }else if(espejoAnimando){
+
+  fbxMixer.stopAllAction();
+  espejoAnimando = false;
+ }
+}
+
+function obtenerPistaAvatar(){
+ try{
+  if(!streamAvatar){
+   const canvas = document.getElementById("avatarCanvas");
+   if(canvas && canvas.captureStream){
+    streamAvatar = canvas.captureStream(15);
+   }
+  }
+  if(streamAvatar){
+   const pista = streamAvatar.getVideoTracks()[0];
+   if(pista && pista.readyState === "live"){
+    return {track:pista,stream:streamAvatar};
+   }
+   streamAvatar = null;
+  }
+ }catch(error){
+  console.warn("No se pudo capturar el avatar:",error);
+ }
+ return null;
+}
+
+/* Si el paciente no tiene cámara, se envía un cuadro con un aviso
+   para que el médico siga viendo el avatar y los datos. */
+function obtenerPistaSinCamara(){
+ if(!streamSinCamara){
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 360;
+  const ctx = c.getContext("2d");
+  const dibujar = ()=>{
+   ctx.fillStyle = "#0b0b14";
+   ctx.fillRect(0,0,640,360);
+   ctx.fillStyle = "#a0a0c0";
+   ctx.font = "22px Arial";
+   ctx.textAlign = "center";
+   ctx.fillText("Paciente sin cámara disponible",320,185);
+  };
+  dibujar();
+  setInterval(dibujar,1000);
+  streamSinCamara = c.captureStream(2);
+ }
+ return {track:streamSinCamara.getVideoTracks()[0],stream:streamSinCamara};
+}
+
+/* Estado que el médico ve en tiempo real */
+function enviarEstadoPaciente(){
+ if(!socket || !socket.connected || !pacienteActual) return;
+
+ socket.emit("patient:state",{
+  estado:aiState,
+  repeticiones:currentRep,
+  dia:diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1,
+  angles:{
+   shoulder:document.getElementById("angleShoulder").innerText,
+   elbow:document.getElementById("angleElbow").innerText,
+   hip:document.getElementById("angleHip").innerText
+  },
+  vitales:{
+   pulso:document.getElementById("heartRate").innerText,
+   respiracion:document.getElementById("respiratoryRate").innerText,
+   saturacion:document.getElementById("oxygenLevel").innerText,
+   temperatura:document.getElementById("bodyTemperature").innerText
+  },
+  dom:capturarDomEspejo(),
+  diasHtml:document.getElementById("daysSequenceContainer").innerHTML,
+  timestamp:Date.now()
+ });
+}
+
+async function vaciarCandidatosPendientes(pc){
+ if(!pc || !pc.remoteDescription) return;
+
+ const lista = candidatosPendientes;
+ candidatosPendientes = [];
+
+ for(const candidato of lista){
+  try{
+   await pc.addIceCandidate(new RTCIceCandidate(candidato));
+  }catch(error){
+   console.warn("Candidato ICE descartado:",error);
+  }
+ }
+}
+
+async function crearConexionWebRTC(){
+
+ if(peerConnection){
+  return peerConnection;
+ }
+
+ await cargarConfiguracionIce();
+
+ const pc = new RTCPeerConnection(RTC_CONFIGURATION);
+ peerConnection = pc;
+
+ // Orden importante: 1) video de cámara (o aviso), 2) audio, 3) avatar
+ const pistaCamara = localStream ? localStream.getVideoTracks()[0] : null;
+
+ if(pistaCamara){
+  pc.addTrack(pistaCamara,localStream);
+ }else{
+  const sinCamara = obtenerPistaSinCamara();
+  pc.addTrack(sinCamara.track,sinCamara.stream);
+ }
+
+ if(localStream){
+  localStream.getAudioTracks().forEach(track=>{
+   pc.addTrack(track,localStream);
+  });
+ }
+
+
+ pc.ontrack = event=>{
+  const remoteVideo = document.getElementById("doctorRemoteVideo");
+  remoteVideo.srcObject =
+   (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+  remoteVideo.play().catch(()=>{});
+ };
+
+ pc.onicecandidate = event=>{
+  if(event.candidate && socket && socket.connected && pacienteActual){
+   socket.emit("patient:ice-candidate",{
+    candidate:event.candidate,
+    cedula:pacienteActual.paciente.documento
+   });
+  }
+ };
+
+ pc.onconnectionstatechange = ()=>{
+  if(peerConnection !== pc) return;
+
+  const estado = document.getElementById("callStatus");
+
+  if(pc.connectionState === "connected"){
+   estado.innerText = "Videollamada: conectada";
+  }else if(pc.connectionState === "failed"){
+   estado.innerText = "Videollamada: falló la conexión";
+   actualizarDialogo("No se pudo establecer el video con el médico. Si están en redes distintas, puede hacer falta un servidor TURN.");
+  }else if(pc.connectionState === "disconnected"){
+   estado.innerText = "Videollamada: conexión inestable";
+  }
+ };
+
+ return pc;
+}
+
+async function aceptarLlamadaEntrante(){
+
+ if(!socket || !socket.connected || !pacienteActual){
+  return;
+ }
+
+ const panel = document.getElementById("doctorEmergencyPanel");
+
+ if(!panel.classList.contains("active")){
+  panel.classList.add("active");
+  panelAbiertoPorLlamada = true;
+ }
+
+ document.getElementById("doctorStatusLabel").innerText = "Conectando con el médico...";
+
+ socket.emit("patient:call-accepted",{
+  cedula:pacienteActual.paciente.documento
+ });
+}
+
+async function recibirOferta(offer){
+ try{
+
+  if(peerConnection){
+   try{peerConnection.close();}catch(e){}
+   peerConnection = null;
+  }
+
+  const pc = await crearConexionWebRTC();
+
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  await vaciarCandidatosPendientes(pc);
+
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  socket.emit("patient:answer",{
+   answer:pc.localDescription,
+   cedula:pacienteActual.paciente.documento
+  });
+
+  callActive = true;
+  document.getElementById("doctorStatusLabel").innerText = "Videollamada activa";
+  document.getElementById("callStatus").innerText = "Videollamada: activa";
+  actualizarDialogo("La videollamada con el médico está activa.");
+ }catch(error){
+  console.error("Error al aceptar la videollamada:",error);
+ }
+}
+
+async function colgarLlamada(){
+ if(socket && socket.connected){
+  socket.emit("patient:hangup",{
+   cedula:pacienteActual ? pacienteActual.paciente.documento : null
+  });
+ }
+ finalizarLlamadaLocal("Has finalizado la videollamada.");
+}
+
+function finalizarLlamadaLocal(mensaje){
+ callActive = false;
+ candidatosPendientes = [];
+ if(peerConnection){
+  peerConnection.close();
+  peerConnection = null;
+ }
+ ocultarAvisoMedico();
+ if(panelAbiertoPorLlamada){
+  document.getElementById("doctorEmergencyPanel").classList.remove("active");
+  panelAbiertoPorLlamada = false;
+ }
+ const remoteVideo = document.getElementById("doctorRemoteVideo");
+ remoteVideo.srcObject = null;
+ document.getElementById("callStatus").innerText = "Videollamada: finalizada";
+ document.getElementById("doctorStatusLabel").innerText = "Videollamada finalizada.";
+ actualizarDialogo(mensaje);
+}
+
+/* =========================================================
+   SALIR DEL PORTAL
+========================================================= */
+
+function cerrarSesionPaciente(){
+
+ aiState = "CERRADA";
+ if(timerEstadoPaciente){
+  clearInterval(timerEstadoPaciente);
+  timerEstadoPaciente = null;
+ }
+ ocultarAvisoMedico();
+ detenerColaVoz();
+
+ if(recognition){
+  try{recognition.stop();}catch(e){}
+ }
+
+ if(doctorTimerInterval){
+  clearInterval(doctorTimerInterval);
+ }
+
+ if(poseCamera){
+  try{poseCamera.stop();}catch(e){}
+ }
+
+ if(localStream){
+  localStream.getTracks().forEach(track=>{track.stop();});
+  localStream = null;
+ }
+
+ if(socket){
+  socket.disconnect();
+  socket = null;
+ }
+
+ if(peerConnection){
+  peerConnection.close();
+  peerConnection = null;
+ }
+
+ if(fbxMixer){
+  fbxMixer.stopAllAction();
+ }
+
+ document.getElementById("doctorEmergencyPanel").classList.remove("active");
+ document.getElementById("patientAppContainer").style.display = "none";
+ document.getElementById("patientLoginSection").style.display = "flex";
+ document.getElementById("webcam").srcObject = null;
+ document.getElementById("doctorRemoteVideo").srcObject = null;
+
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+
+}
+
+/* =========================================================
+   INICIO DEL RENDER 3D
+========================================================= */
+
+animate();
+
+</script>
 </body>
 </html>

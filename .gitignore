@@ -2,3 +2,11 @@
 .env
 .env.*
 !.env.example
+
+datos
+*_backup.*
+*_github.*
+
+datos
+*_backup.*
+*_github.*

@@ -330,6 +330,7 @@ let candidatosPendientes = [];
 let panelAbiertoPorLlamada = false;
 let ultimoEnvioMovimiento = 0;
 let timerEstadoPaciente = null;
+let timerInstantaneaTerapia = null;
 let timerAvisoMedico = null;
 let vozActiva = false;
 let vozBloqueada = false;
@@ -373,34 +374,87 @@ async function cargarConfiguracionIce(){
    LOGIN Y DATOS DEL PACIENTE
 ========================================================= */
 
-function loginPaciente(){
+function mezclarSesionesLocales(cedula,sesionesServidor){
+ try{
+  const key = `uac_sesiones_${cedula}`;
+  const locales = JSON.parse(localStorage.getItem(key) || "[]");
+  const mapa = new Map();
+  (Array.isArray(sesionesServidor)?sesionesServidor:[]).forEach(x=>mapa.set(String(x.fecha),x));
+  locales.forEach(x=>{ if(!mapa.has(String(x.fecha))) mapa.set(String(x.fecha),x); });
+  localStorage.setItem(key,JSON.stringify([...mapa.values()]));
+ }catch(e){}
+}
+
+async function loginPaciente(){
 
  const cedulaInput = document.getElementById("patLoginCedula").value.trim();
+ const errorEl = document.getElementById("loginError");
+
+ if(!cedulaInput){
+  errorEl.style.display = "block";
+  return;
+ }
 
  try{
 
-  const baseRaw = localStorage.getItem("uac_base_pacientes");
-  const basePacientes = baseRaw ? JSON.parse(baseRaw) : [];
+  let encontrado = null;
+  let servidorRespondio = false;
 
-  let encontrado = basePacientes.find(p=>
-   p.paciente && String(p.paciente.documento)===cedulaInput
-  );
+  // 1) Se busca primero en el servidor (así funciona desde cualquier dispositivo)
+  try{
+   const r = await fetch("/api/paciente/login",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({cedula:cedulaInput}),
+    cache:"no-store"
+   });
 
-  if(!encontrado){
+   if(r.status===429){
+    alert("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
+    return;
+   }
 
-   const fallback = localStorage.getItem("uac_historia_clinica");
+   if(r.ok){
+    encontrado = await r.json();
+    servidorRespondio = true;
+   }else if(r.status===404){
+    servidorRespondio = true;
+   }
+  }catch(e){
+   servidorRespondio = false;
+  }
 
-   if(fallback){
-    const fbObj = JSON.parse(fallback);
+  if(encontrado){
+   const ced = encontrado.paciente.documento;
+   mezclarSesionesLocales(ced,encontrado.sesionesHistorial);
+   try{
+    localStorage.setItem(`uac_terapias_${ced}`,JSON.stringify(encontrado.terapias || {}));
+   }catch(e){}
+  }
 
-    if(fbObj.paciente && String(fbObj.paciente.documento)===cedulaInput){
-     encontrado = fbObj;
+  // 2) Solo si el servidor no responde, se usan los datos de este navegador
+  if(!encontrado && !servidorRespondio){
+
+   const baseRaw = localStorage.getItem("uac_base_pacientes");
+   const basePacientes = baseRaw ? JSON.parse(baseRaw) : [];
+
+   encontrado = basePacientes.find(p=>
+    p.paciente && String(p.paciente.documento)===cedulaInput
+   );
+
+   if(!encontrado){
+    const fallback = localStorage.getItem("uac_historia_clinica");
+    if(fallback){
+     const fbObj = JSON.parse(fallback);
+     if(fbObj.paciente && String(fbObj.paciente.documento)===cedulaInput){
+      encontrado = fbObj;
+     }
     }
    }
   }
 
   if(!encontrado){
-   document.getElementById("loginError").style.display = "block";
+   errorEl.style.display = "block";
    return;
   }
 
@@ -409,7 +463,7 @@ function loginPaciente(){
    return;
   }
 
-  document.getElementById("loginError").style.display = "none";
+  errorEl.style.display = "none";
   cargarDashboardPaciente(encontrado);
 
  }catch(error){
@@ -1749,23 +1803,50 @@ function animate(){
 
 const MQTT_URL = "wss://broker.emqx.io:8084/mqtt";
 const MQTT_TOPIC = "miproyecto-8472/sensores/datos";
-const MQTT_VENCE_MS = 5000; // sin datos en 5 s => "No disponible"
 
 let mqttClient = null;
-let timerMqttVencido = null;
+let mqttCampos = "";
+let timerEdadVitales = null;
+let vitalesPendientes = []; // lecturas que no se pudieron enviar por falta de conexión
 
-// Acepta varios nombres posibles de campo; AJUSTA si tu JSON usa otros
+/* Último valor conocido de cada signo vital. El ESP32 envía cada cierto
+   tiempo (p. ej. 1 minuto): el valor se QUEDA en pantalla hasta que
+   llegue uno nuevo, y entonces se actualiza. */
+const ultimoVital = {pulso:null,respiracion:null,saturacion:null,temperatura:null,t:0};
+
+// Nombres de campo aceptados (se comparan sin mayúsculas, tildes ni guiones)
 const CAMPOS_VITALES = {
- pulso:["frecuencia_cardiaca","frecuenciaCardiaca","pulso","fc","bpm","heartRate"],
- respiracion:["frecuencia_respiratoria","frecuenciaRespiratoria","respiracion","resp","fr"],
- saturacion:["spo2","SpO2","saturacion","oxigeno"],
- temperatura:["temperatura","temp","temperature"]
+ pulso:["frecuencia_cardiaca","frecuenciaCardiaca","frecuencia_cardíaca","frecuencia cardiaca","pulso","fc","bpm","hr","heart_rate","heartRate","heartrate","ritmo_cardiaco","latidos"],
+ respiracion:["frecuencia_respiratoria","frecuenciaRespiratoria","frecuencia respiratoria","respiracion","respiración","resp","fr","rr","respiratory_rate","respiratoryRate","resp_rate","rpm"],
+ saturacion:["spo2","SpO2","sp_o2","saturacion","saturación","saturacion_oxigeno","saturacionOxigeno","oxigeno","oxígeno","oxygen","o2","sat"],
+ temperatura:["temperatura","temp","temperature","temperatura_corporal","body_temp","bodyTemperature","tempC","temp_c"]
 };
 
-function leerNumero(obj,claves){
+function normClave(k){
+ return String(k).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+}
+
+// Aplana el JSON (también lee objetos anidados, p. ej. {"vitales":{"spo2":97}})
+function aplanarJson(obj,out,prof){
+ out = out || {};
+ prof = prof || 0;
+ if(!obj || typeof obj !== "object") return out;
+ for(const k in obj){
+  const v = obj[k];
+  if(v && typeof v === "object" && !Array.isArray(v) && prof < 3){
+   aplanarJson(v,out,prof+1);
+  }else{
+   out[normClave(k)] = v;
+  }
+ }
+ return out;
+}
+
+function leerNumero(plano,claves){
  for(const k of claves){
-  if(obj[k] !== undefined && obj[k] !== null && obj[k] !== ""){
-   const n = Number(obj[k]);
+  const v = plano[normClave(k)];
+  if(v !== undefined && v !== null && v !== ""){
+   const n = Number(String(v).replace(",","."));
    if(Number.isFinite(n)) return n;
   }
  }
@@ -1775,21 +1856,91 @@ function leerNumero(obj,claves){
 function pintarVital(id,valor,unidad,decimales){
  const el = document.getElementById(id);
  if(!el) return;
- el.innerText = (valor === null)
+ el.innerText = (valor === null || valor === undefined)
   ? "No disponible"
   : `${valor.toFixed(decimales)} ${unidad}`;
 }
 
+function repintarVitales(){
+ pintarVital("heartRate",ultimoVital.pulso,"lpm",0);
+ pintarVital("respiratoryRate",ultimoVital.respiracion,"rpm",0);
+ pintarVital("oxygenLevel",ultimoVital.saturacion,"%",0);
+ pintarVital("bodyTemperature",ultimoVital.temperatura,"°C",1);
+}
+
 function limpiarVitales(){
- pintarVital("heartRate",null);
- pintarVital("respiratoryRate",null);
- pintarVital("oxygenLevel",null);
- pintarVital("bodyTemperature",null);
+ ultimoVital.pulso = null;
+ ultimoVital.respiracion = null;
+ ultimoVital.saturacion = null;
+ ultimoVital.temperatura = null;
+ ultimoVital.t = 0;
+ repintarVitales();
 }
 
 function estadoMqtt(texto){
  const el = document.getElementById("mqttStatus");
  if(el) el.innerText = "Sensores: " + texto;
+}
+
+function textoEdad(ms){
+ const s = Math.max(0,Math.round(ms/1000));
+ if(s < 60) return `hace ${s} s`;
+ const m = Math.floor(s/60);
+ if(m < 60) return `hace ${m} min`;
+ return `hace ${Math.floor(m/60)} h`;
+}
+
+function actualizarEdadVitales(){
+ if(!ultimoVital.t) return;
+ estadoMqtt(`último dato ${textoEdad(Date.now()-ultimoVital.t)}`);
+}
+
+function numeroDeElemento(id){
+ const el = document.getElementById(id);
+ if(!el) return null;
+ const n = parseFloat(String(el.innerText).replace(",","."));
+ return Number.isFinite(n) ? n : null;
+}
+
+function construirPayloadVitales(origen,valores){
+ return {
+  t:Date.now(),
+  pulso:valores.pulso,
+  respiracion:valores.respiracion,
+  saturacion:valores.saturacion,
+  temperatura:valores.temperatura,
+  angulos:{
+   hombro:numeroDeElemento("angleShoulder"),
+   codo:numeroDeElemento("angleElbow"),
+   cadera:numeroDeElemento("angleHip")
+  },
+  estado:aiState,
+  dia:diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1,
+  repeticiones:currentRep,
+  origen:origen
+ };
+}
+
+/* Envía la lectura al servidor, que la guarda en el historial del paciente
+   y se la muestra al médico. Si no hay conexión, queda en cola. */
+function enviarVitalesAlServidor(origen,valores){
+ if(!pacienteActual) return;
+
+ const payload = construirPayloadVitales(origen,valores);
+
+ if(socket && socket.connected){
+  socket.emit("patient:vitals",payload);
+ }else{
+  vitalesPendientes.push(payload);
+  if(vitalesPendientes.length > 200) vitalesPendientes.shift();
+ }
+}
+
+function vaciarVitalesPendientes(){
+ if(!socket || !socket.connected) return;
+ const cola = vitalesPendientes;
+ vitalesPendientes = [];
+ cola.forEach(p=>socket.emit("patient:vitals",p));
 }
 
 function iniciarMQTT(){
@@ -1808,15 +1959,15 @@ function iniciarMQTT(){
  });
 
  mqttClient.on("connect",()=>{
-  estadoMqtt("conectado, esperando datos...");
+  estadoMqtt(ultimoVital.t ? "conectado" : "conectado, esperando datos...");
   mqttClient.subscribe(MQTT_TOPIC);
  });
 
  mqttClient.on("reconnect",()=>estadoMqtt("reconectando..."));
 
+ // Al perder conexión NO se borran los valores: se conservan los últimos
  mqttClient.on("close",()=>{
-  estadoMqtt("desconectado");
-  limpiarVitales();
+  estadoMqtt(ultimoVital.t ? "desconectado (se conserva el último dato)" : "desconectado");
  });
 
  mqttClient.on("error",(e)=>{
@@ -1834,21 +1985,42 @@ function iniciarMQTT(){
    return;
   }
 
-  pintarVital("heartRate",leerNumero(d,CAMPOS_VITALES.pulso),"lpm",0);
-  pintarVital("respiratoryRate",leerNumero(d,CAMPOS_VITALES.respiracion),"rpm",0);
-  pintarVital("oxygenLevel",leerNumero(d,CAMPOS_VITALES.saturacion),"%",0);
-  pintarVital("bodyTemperature",leerNumero(d,CAMPOS_VITALES.temperatura),"°C",1);
+  const plano = aplanarJson(d);
+  console.log("MQTT recibido:",d);
 
-  estadoMqtt("recibiendo datos");
+  // Solo se actualiza lo que llegó en este mensaje; lo demás se conserva
+  const nuevos = {
+   pulso:leerNumero(plano,CAMPOS_VITALES.pulso),
+   respiracion:leerNumero(plano,CAMPOS_VITALES.respiracion),
+   saturacion:leerNumero(plano,CAMPOS_VITALES.saturacion),
+   temperatura:leerNumero(plano,CAMPOS_VITALES.temperatura)
+  };
 
-  // Si el ESP32 se apaga o pierde WiFi, los valores no se quedan congelados
-  clearTimeout(timerMqttVencido);
-  timerMqttVencido = setTimeout(()=>{
-   limpiarVitales();
-   estadoMqtt("sin datos del ESP32");
-  },MQTT_VENCE_MS);
+  mqttCampos = Object.keys(plano).join(", ");
+  const estadoEl = document.getElementById("mqttStatus");
+  if(estadoEl) estadoEl.title = "Campos recibidos: " + mqttCampos;
+
+  const hayAlguno = Object.values(nuevos).some(v=>v !== null);
+
+  if(!hayAlguno){
+   estadoMqtt("llegó un mensaje sin campos reconocidos (" + mqttCampos + ")");
+   return;
+  }
+
+  Object.keys(nuevos).forEach(k=>{
+   if(nuevos[k] !== null) ultimoVital[k] = nuevos[k];
+  });
+  ultimoVital.t = Date.now();
+
+  repintarVitales();
+  actualizarEdadVitales();
+
+  enviarVitalesAlServidor("sensor",nuevos);
 
  });
+
+ if(timerEdadVitales) clearInterval(timerEdadVitales);
+ timerEdadVitales = setInterval(actualizarEdadVitales,1000);
 
 }
 
@@ -1874,6 +2046,17 @@ function iniciarConexionServidor(){
  }
  timerEstadoPaciente = setInterval(enviarEstadoPaciente,500);
 
+ // Mientras la terapia está en curso, cada minuto se guarda una instantánea
+ // (últimos signos vitales + ángulos) en el historial clínico
+ if(timerInstantaneaTerapia){
+  clearInterval(timerInstantaneaTerapia);
+ }
+ timerInstantaneaTerapia = setInterval(()=>{
+  if(aiState==="TERAPIA"){
+   enviarVitalesAlServidor("terapia",ultimoVital);
+  }
+ },60000);
+
  socket.on("connect",()=>{
 
   document.getElementById("connectionStatus").innerText =
@@ -1887,6 +2070,8 @@ function iniciarConexionServidor(){
     `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`
 
   });
+
+  vaciarVitalesPendientes();
 
  });
 
