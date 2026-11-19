@@ -12,9 +12,11 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <!-- MediaPipe -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script type="module">
+  import { PoseLandmarker, HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+  window.MediaPipeVision = { PoseLandmarker, HandLandmarker, FilesetResolver };
+</script>
+ 
 
 <!-- Socket.IO -->
 <script src="/socket.io/socket.io.js"></script>
@@ -98,7 +100,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
 .call-btn{background:#00d26a;color:#101020;border:0}
 .hang-btn{background:#ff4d4d;color:white;border:0;display:none}
 
-#poseCanvas{position:absolute;inset:0;width:100%;height:75vh;pointer-events:none;transform:scaleX(-1);z-index:15;}
+#poseCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;transform:scaleX(-1);z-index:15;}
 #connectionStatus{font-size:.65rem;color:#ffd166;margin-top:3px}
 #callStatus{font-size:.7rem;color:#00d26a;margin-top:3px}
 
@@ -1137,255 +1139,316 @@ function forzarInicioTerapia(){
 }
 
 /* =========================================================
-   MEDIAPIPE - SEGUIMIENTO CORPORAL CORREGIDO
+   MEDIAPIPE - SEGUIMIENTO CORPORAL
 ========================================================= */
+ 
+let poseLandmarker = null;
+let handLandmarker = null;
+let lastVideoTime = -1;
 
-function iniciarSeguimientoCorporal(){
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[0,17],[17,18],[18,19],[19,20]
+];
 
- if(typeof Pose==="undefined"){
+const FULL_BODY_CONNECTIONS = [
+  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+  [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
+  [27, 29], [27, 31], [29, 31], [24, 26], [26, 28],
+  [28, 30], [28, 32], [30, 32]
+];
 
-  console.error("MediaPipe Pose no se cargó.");
+const BODY_JOINTS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
 
-  document.getElementById("poseStatus").innerText = "No disponible";
-
-  document.getElementById("poseFeedback").innerText =
-   "No se pudo cargar MediaPipe. Comprueba tu conexión a Internet.";
-
-  return;
- }
-
- pose = new Pose({
-
-  locateFile:(file)=>{
-   return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+async function iniciarSeguimientoCorporal() {
+  // Esperar un momento si el módulo ES aún está terminando de cargar
+  let intentos = 0;
+  while (!window.MediaPipeVision && intentos < 30) {
+    await new Promise(r => setTimeout(r, 150));
+    intentos++;
   }
 
- });
-
- // Umbrales ajustados a 0.35 para máxima sensibilidad y detección fluida
- pose.setOptions({
-
-  modelComplexity:1,
-  smoothLandmarks:true,
-  enableSegmentation:false,
-  smoothSegmentation:false,
-  minDetectionConfidence:.35,
-  minTrackingConfidence:.35
-
- });
-
- pose.onResults(procesarResultadosPose);
-
- const videoElement = document.getElementById("webcam");
-
- poseCamera = new Camera(videoElement,{
-
-  onFrame:async()=>{
-
-   if(pose && videoElement.readyState>=2){
-    await pose.send({image:videoElement});
-   }
-
-  },
-
-  width:1280,
-  height:720
-
- });
-
- poseCamera.start()
-  .then(()=>{
-   poseReady = true;
-   console.log("MediaPipe Camera iniciada correctamente.");
-  })
-  .catch((err)=>{
-   console.error("Error al iniciar MediaPipe Camera:", err);
-  });
-}
-
-function calcularAngulo(a,b,c){
-
- const radians =
-  Math.atan2(c.y-b.y,c.x-b.x) -
-  Math.atan2(a.y-b.y,a.x-b.x);
-
- let angle = Math.abs(radians*180/Math.PI);
-
- if(angle>180)angle=360-angle;
-
- return Math.round(angle);
-}
-
-function procesarResultadosPose(results){
-
- lastPoseResults = results;
-
- const canvas = document.getElementById("poseCanvas");
- const ctx = canvas.getContext("2d");
- const video = document.getElementById("webcam");
-
- if(!canvas || !video) return;
-
- // Sincronización exacta del canvas con las dimensiones del video de la webcam
- if(canvas.width!==video.videoWidth || canvas.height!==video.videoHeight){
-
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
-
- }
-
- ctx.clearRect(0,0,canvas.width,canvas.height);
-
- if(!results.poseLandmarks){
-
-  document.getElementById("poseStatus").innerText = "Buscando cuerpo...";
-  return;
-
- }
-
- const lm = results.poseLandmarks;
-
- if(typeof drawConnectors!=="undefined"){
-
-  drawConnectors(ctx,lm,POSE_CONNECTIONS,{
-   color:"#00d26a",
-   lineWidth:4
-  });
-
-  drawLandmarks(ctx,lm,{
-   color:"#ffffff",
-   lineWidth:2,
-   radius:4
-  });
-
- }
-
- document.getElementById("poseStatus").innerText = "Cuerpo detectado";
-
- const L = {
-  shoulder:lm[11],
-  elbow:lm[13],
-  wrist:lm[15],
-  hip:lm[23],
-  knee:lm[25],
-  ankle:lm[27]
- };
-
- const visible =
-  L.shoulder.visibility>.3 &&
-  L.elbow.visibility>.3 &&
-  L.wrist.visibility>.3;
-
- if(visible){
-
-  const elbowAngle = calcularAngulo(
-   L.shoulder,
-   L.elbow,
-   L.wrist
-  );
-
-  document.getElementById("angleElbow").innerText =
-   elbowAngle+"°";
-
-  const shoulderAngle = calcularAngulo(
-   {x:L.shoulder.x,y:L.shoulder.y-0.2},
-   L.shoulder,
-   L.elbow
-  );
-
-  document.getElementById("angleShoulder").innerText =
-   shoulderAngle+"°";
-
-  document.getElementById("valAngle").innerText =
-   shoulderAngle+"°";
-
- }
-
- if(
-  L.hip.visibility>.3 &&
-  L.knee.visibility>.3 &&
-  L.ankle.visibility>.3
- ){
-
-  const hipAngle = calcularAngulo(
-   L.shoulder,
-   L.hip,
-   L.knee
-  );
-
-  document.getElementById("angleHip").innerText =
-   hipAngle+"°";
-
- }
-
- detectarRepeticionBrazo(lm);
-
- if(socket && socket.connected && pacienteActual && (Date.now()-ultimoEnvioMovimiento)>250){
-
-  ultimoEnvioMovimiento = Date.now();
-
-  socket.emit("patient:movement",{
-
-   cedula:pacienteActual.paciente.documento,
-
-   angles:{
-    shoulder:document.getElementById("angleShoulder").innerText,
-    elbow:document.getElementById("angleElbow").innerText,
-    hip:document.getElementById("angleHip").innerText
-   },
-
-   repetitions:currentRep,
-   timestamp:Date.now()
-
-  });
-
- }
-}
-
-function detectarRepeticionBrazo(lm){
-
- if(aiState!=="TERAPIA")return;
-
- const shoulder = lm[11];
- const elbow = lm[13];
- const wrist = lm[15];
-
- if(
-  shoulder.visibility<.3 ||
-  elbow.visibility<.3 ||
-  wrist.visibility<.3
- ){
-
-  document.getElementById("poseFeedback").innerText =
-   "Asegúrate de que tu brazo esté visible en la cámara.";
-
-  return;
- }
-
- const levantado = wrist.y < shoulder.y-.08;
-
- if(levantado && !brazoArriba){
-
-  brazoArriba = true;
-  ultimaRepeticion = Date.now();
-
- }
-
- if(!levantado && brazoArriba){
-
-  brazoArriba = false;
-
-  if(Date.now()-ultimaRepeticion>350){
-   registrarRepeticion();
+  if (!window.MediaPipeVision) {
+    console.error("MediaPipe Tasks Vision no se cargó.");
+    document.getElementById("poseStatus").innerText = "No disponible";
+    document.getElementById("poseFeedback").innerText =
+      "No se pudo cargar MediaPipe. Comprueba tu conexión a Internet.";
+    return;
   }
 
- }
+  try {
+    const { PoseLandmarker, HandLandmarker, FilesetResolver } = window.MediaPipeVision;
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
 
- document.getElementById("poseFeedback").innerText =
-  levantado
-   ? "Movimiento detectado: brazo elevado."
-   : "Mantén una posición cómoda y sigue las instrucciones.";
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.45,
+      minPosePresenceConfidence: 0.45,
+      minTrackingConfidence: 0.45
+    });
 
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2
+    });
+
+    poseReady = true;
+    document.getElementById("poseStatus").innerText = "Listo";
+    requestAnimationFrame(bucleDeteccionVisual);
+  } catch (err) {
+    console.error("Error inicializando modelos:", err);
+    document.getElementById("poseStatus").innerText = "Error de modelo";
+  }
+}
+
+function drawLabelDetector(ctx, canvas, text, normX, normY, bgColor = "#8b5cf6", textColor = "#ffffff") {
+  const x = normX * canvas.width;
+  const y = normY * canvas.height;
+
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.font = "bold 14px 'Segoe UI', Arial, sans-serif";
+  const w = ctx.measureText(text).width + 14;
+  const h = 24;
+  const rx = -x - w / 2;
+  const ry = y - h - 8;
+
+  ctx.fillStyle = bgColor;
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, w, h, 5);
+  ctx.fill();
+
+  ctx.fillStyle = textColor;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, -x, ry + h / 2);
+  ctx.restore();
+}
+
+function drawSquareFaceBox(ctx, canvas, poseLm) {
+  const facePoints = [poseLm[0], poseLm[2], poseLm[5], poseLm[7], poseLm[8]].filter(p => p);
+  if (facePoints.length < 2) return;
+
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of facePoints) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  const cx = ((minX + maxX) / 2) * canvas.width;
+  const cy = ((minY + maxY) / 2) * canvas.height - canvas.height * 0.015;
+  const rawW = (maxX - minX) * canvas.width * 1.85;
+  const rawH = (maxY - minY) * canvas.height * 2.45;
+  const side = Math.max(rawW, rawH, 90);
+
+  const x1 = cx - side / 2;
+  const y1 = cy - side / 2;
+
+  ctx.save();
+  ctx.strokeStyle = "#34d399";
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([7, 5]);
+  ctx.strokeRect(x1, y1, side, side);
+  ctx.restore();
+
+  const conf = Math.round((poseLm[0]?.visibility ?? 0.97) * 100);
+  drawLabelDetector(ctx, canvas, `Rostro · ${conf}%`, cx / canvas.width, (y1 + 26) / canvas.height, "#10b981", "#ffffff");
+}
+
+function countExtendedFingers(lm) {
+  let count = 0;
+  const tips = [8, 12, 16, 20];
+  const pips = [6, 10, 14, 18];
+  for (let i = 0; i < tips.length; i++) {
+    if (lm[tips[i]].y < lm[pips[i]].y) count++;
+  }
+  if (Math.abs(lm[4].x - lm[5].x) > Math.abs(lm[3].x - lm[5].x)) {
+    count++;
+  }
+  return count;
+}
+
+function bucleDeteccionVisual(timestamp) {
+  if (aiState === "CERRADA") return;
+
+  const video = document.getElementById("webcam");
+  const canvas = document.getElementById("poseCanvas");
+
+  if (video && canvas && video.readyState >= 2 && poseLandmarker && handLandmarker) {
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+    }
+
+    if (video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const poseRes = poseLandmarker.detectForVideo(video, timestamp);
+      const handRes = handLandmarker.detectForVideo(video, timestamp);
+
+      // 1. Cuerpo completo + Rostro + Lógica clínica
+      if (poseRes.landmarks && poseRes.landmarks.length > 0) {
+        const lm = poseRes.landmarks[0];
+        lastPoseResults = lm;
+
+        for (const [a, b] of FULL_BODY_CONNECTIONS) {
+          if (lm[a] && lm[b]) {
+            ctx.beginPath();
+            ctx.moveTo(lm[a].x * canvas.width, lm[a].y * canvas.height);
+            ctx.lineTo(lm[b].x * canvas.width, lm[b].y * canvas.height);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
+        }
+
+        for (const idx of BODY_JOINTS) {
+          if (lm[idx]) {
+            ctx.beginPath();
+            ctx.arc(lm[idx].x * canvas.width, lm[idx].y * canvas.height, 6, 0, Math.PI * 2);
+            ctx.fillStyle = "#0f172a";
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#38bdf8";
+            ctx.stroke();
+          }
+        }
+
+        drawSquareFaceBox(ctx, canvas, lm);
+        procesarMetricasClinicas(lm);
+      } else {
+        document.getElementById("poseStatus").innerText = "Buscando cuerpo...";
+      }
+
+      // 2. Manos y conteo de dedos
+      const numHands = handRes.landmarks ? handRes.landmarks.length : 0;
+      if (numHands > 0) {
+        handRes.landmarks.forEach((hlm, i) => {
+          const handedness = handRes.handednesses?.[i]?.[0]?.categoryName || "Left";
+          const sideLabel = handedness === "Left" ? "Izquierda" : "Derecha";
+          const fingers = countExtendedFingers(hlm);
+
+          for (const [a, b] of HAND_CONNECTIONS) {
+            ctx.beginPath();
+            ctx.moveTo(hlm[a].x * canvas.width, hlm[a].y * canvas.height);
+            ctx.lineTo(hlm[b].x * canvas.width, hlm[b].y * canvas.height);
+            ctx.strokeStyle = "#a78bfa";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          for (const pt of hlm) {
+            ctx.beginPath();
+            ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4.5, 0, Math.PI * 2);
+            ctx.fillStyle = "#c084fc";
+            ctx.fill();
+          }
+
+          drawLabelDetector(ctx, canvas, `${sideLabel} · ${fingers} dedos`, hlm[0].x, hlm[0].y, "#7c3aed", "#ffffff");
+        });
+      }
+    }
+  }
+
+  requestAnimationFrame(bucleDeteccionVisual);
+}
+
+function calcularAngulo(a, b, c) {
+  const radians = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
+  let angle = Math.abs(radians * 180 / Math.PI);
+  if (angle > 180) angle = 360 - angle;
+  return Math.round(angle);
+}
+
+function procesarMetricasClinicas(lm) {
+  document.getElementById("poseStatus").innerText = "Cuerpo detectado";
+
+  const L = {
+    shoulder: lm[11],
+    elbow: lm[13],
+    wrist: lm[15],
+    hip: lm[23],
+    knee: lm[25],
+    ankle: lm[27]
+  };
+
+  if (L.shoulder.visibility > 0.3 && L.elbow.visibility > 0.3 && L.wrist.visibility > 0.3) {
+    const elbowAngle = calcularAngulo(L.shoulder, L.elbow, L.wrist);
+    document.getElementById("angleElbow").innerText = elbowAngle + "°";
+
+    const shoulderAngle = calcularAngulo({ x: L.shoulder.x, y: L.shoulder.y - 0.2 }, L.shoulder, L.elbow);
+    document.getElementById("angleShoulder").innerText = shoulderAngle + "°";
+    document.getElementById("valAngle").innerText = shoulderAngle + "°";
+  }
+
+  if (L.hip.visibility > 0.3 && L.knee.visibility > 0.3 && L.ankle.visibility > 0.3) {
+    const hipAngle = calcularAngulo(L.shoulder, L.hip, L.knee);
+    document.getElementById("angleHip").innerText = hipAngle + "°";
+  }
+
+  detectarRepeticionBrazo(lm);
+
+  if (socket && socket.connected && pacienteActual && (Date.now() - ultimoEnvioMovimiento) > 250) {
+    ultimoEnvioMovimiento = Date.now();
+    socket.emit("patient:movement", {
+      cedula: pacienteActual.paciente.documento,
+      angles: {
+        shoulder: document.getElementById("angleShoulder").innerText,
+        elbow: document.getElementById("angleElbow").innerText,
+        hip: document.getElementById("angleHip").innerText
+      },
+      repetitions: currentRep,
+      timestamp: Date.now()
+    });
+  }
+}
+
+function detectarRepeticionBrazo(lm) {
+  if (aiState !== "TERAPIA") return;
+
+  const shoulder = lm[11];
+  const elbow = lm[13];
+  const wrist = lm[15];
+
+  if (shoulder.visibility < 0.3 || elbow.visibility < 0.3 || wrist.visibility < 0.3) {
+    document.getElementById("poseFeedback").innerText = "Asegúrate de que tu brazo esté visible en la cámara.";
+    return;
+  }
+
+  const levantado = wrist.y < shoulder.y - 0.08;
+
+  if (levantado && !brazoArriba) {
+    brazoArriba = true;
+    ultimaRepeticion = Date.now();
+  }
+
+  if (!levantado && brazoArriba) {
+    brazoArriba = false;
+    if (Date.now() - ultimaRepeticion > 350) {
+      registrarRepeticion();
+    }
+  }
+
+  document.getElementById("poseFeedback").innerText =
+    levantado ? "Movimiento detectado: brazo elevado." : "Mantén una posición cómoda y sigue las instrucciones.";
 }
 
 /* =========================================================
