@@ -11,16 +11,26 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<!-- MediaPipe -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-
 <!-- Socket.IO -->
 <script src="/socket.io/socket.io.js"></script>
 
 <!-- MQTT (signos vitales desde el ESP32) -->
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
+
+<!-- MediaPipe Tasks Vision -->
+<script type="module">
+  import {
+    PoseLandmarker,
+    HandLandmarker,
+    FilesetResolver
+  } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+  window.MediaPipeVision = {
+    PoseLandmarker,
+    HandLandmarker,
+    FilesetResolver
+  };
+</script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -40,8 +50,28 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .avatar-container{width:100%;flex:1;min-height:0;position:relative}
 #avatarCanvas{width:100%;height:100%;display:block}
 .right-panel{width:50%;height:100vh;position:relative;background:#0f0f1b;display:flex;flex-direction:column;overflow-y:auto}
-.right-panel video{width:100%;height:75vh;object-fit:cover;transform:scaleX(-1);border-bottom:2px solid rgba(0,210,106,.3);flex-shrink:0;background:#080810}
+.video-stage{position:relative;width:100%;height:75vh;flex-shrink:0;border-bottom:2px solid rgba(0,210,106,.3);overflow:hidden;background:#080810}
+.video-stage video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+#poseCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;transform:scaleX(-1);z-index:15}
 .right-content{padding:8px 12px;flex:1;display:flex;flex-direction:column;gap:6px}
+
+.hands-badge{display:none!important}
+#avatarStepBadge{display:none!important}
+
+/* Banner flotante de acompañamiento empático (Refuerzo Positivo / Corrección sin Alarma) */
+.support-banner{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:25;background:rgba(15,23,42,.95);border:2px solid #fb7185;color:#fff;padding:10px 18px;border-radius:12px;font-size:.82rem;font-weight:bold;text-align:center;max-width:90%;box-shadow:0 8px 24px rgba(0,0,0,.55);display:none;animation:pulseWarn .8s ease-in-out}
+.support-banner.positive{background:rgba(6,78,59,.95);border-color:#34d399;color:#ecfdf5}
+.support-banner.show{display:block}
+@keyframes pulseWarn{0%{transform:translateX(-50%) scale(.96)}50%{transform:translateX(-50%) scale(1.02)}100%{transform:translateX(-50%) scale(1)}}
+
+/* Reloj de descanso de 1 minuto entre ejercicios */
+.rest-timer-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;background:rgba(15,23,42,.96);border:2px solid #38bdf8;border-radius:16px;padding:20px 28px;text-align:center;min-width:265px;box-shadow:0 12px 32px rgba(0,0,0,.75);display:none}
+.rest-timer-overlay.active{display:block}
+.rest-timer-title{font-size:.78rem;color:#38bdf8;font-weight:bold;text-transform:uppercase;letter-spacing:.6px}
+.rest-timer-clock{font-size:2.9rem;font-weight:bold;color:#ffffff;margin:6px 0;font-variant-numeric:tabular-nums}
+.rest-timer-sub{font-size:.76rem;color:#cbd5e1;margin-bottom:12px;line-height:1.35}
+.btn-skip-rest{background:rgba(56,189,248,.2);color:#7dd3fc;border:1px solid #38bdf8;padding:6px 14px;border-radius:6px;font-size:.73rem;font-weight:bold}
+.btn-skip-rest:hover{background:rgba(56,189,248,.35)}
 
 .telemetry-panel{position:absolute;top:15px;left:15px;background:rgba(15,15,27,.9);padding:8px 12px;border-radius:8px;z-index:10;min-width:205px;border:1px solid rgba(0,210,106,.2)}
 .telemetry-title{font-size:.75rem;font-weight:bold;margin-bottom:4px;color:#00d26a;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:2px}
@@ -49,17 +79,30 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .telemetry-label{color:#a0a0c0}
 .telemetry-value{font-weight:bold;color:white}
 
-.precision-panel{position:absolute;bottom:15px;left:15px;background:rgba(15,15,27,.9);padding:8px 14px;border-radius:8px;border-left:4px solid #00d26a;z-index:10;max-width:300px}
+.movement-switcher{display:none!important}
+.movement-switcher-title{font-size:.66rem;color:#00d26a;font-weight:bold;text-transform:uppercase}
+.movement-status-sub{font-size:.66rem;color:#e2e8f0;margin-bottom:2px}
+.movement-btn{background:#1a1a2e;color:#e2e8f0;border:1px solid #303050;padding:4px 7px;border-radius:5px;font-size:.65rem;font-weight:bold;text-align:left}
+.movement-btn.active{background:rgba(0,210,106,.22);border-color:#00d26a;color:#00d26a}
+
+.precision-panel{position:absolute;bottom:15px;left:15px;background:rgba(15,15,27,.92);padding:8px 14px;border-radius:8px;border-left:4px solid #00d26a;border-top:1px solid rgba(0,210,106,.25);border-right:1px solid rgba(0,210,106,.25);border-bottom:1px solid rgba(0,210,106,.25);z-index:10;max-width:340px;transition:border-color .2s,background-color .2s}
+.precision-panel.estado-bien{border-left-color:#10b981;border-color:#10b981;background:rgba(16,185,129,.18)}
+.precision-panel.estado-mal{border-left-color:#ef4444;border-color:#ef4444;background:rgba(239,68,68,.22)}
+.precision-panel.estado-descanso{border-left-color:#38bdf8;border-color:#38bdf8;background:rgba(56,189,248,.16)}
 .precision-title{font-size:.7rem;color:#a0a0c0;text-transform:uppercase}
-.precision-value{font-size:1.4rem;font-weight:bold;color:#00d26a}
-.feedback-text{font-size:.72rem;color:#e0e0e0;margin-top:3px}
+.precision-value{font-size:1.4rem;font-weight:bold;color:#00d26a;transition:color .2s}
+.precision-panel.estado-bien .precision-value{color:#10b981}
+.precision-panel.estado-mal .precision-value{color:#ef4444}
+.precision-panel.estado-descanso .precision-value{color:#38bdf8}
+.count-badge-estado{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:.64rem;font-weight:bold;background:rgba(6,182,212,.18);color:#67e8f9;border:1px solid rgba(6,182,212,.5)}
+.precision-panel.estado-bien .count-badge-estado{background:rgba(16,185,129,.25);color:#34d399;border-color:rgba(16,185,129,.6)}
+.precision-panel.estado-mal .count-badge-estado{background:rgba(239,68,68,.25);color:#fca5a5;border-color:rgba(239,68,68,.6)}
+.precision-panel.estado-descanso .count-badge-estado{background:rgba(56,189,248,.25);color:#7dd3fc;border-color:rgba(56,189,248,.6)}
+.feedback-text{font-size:.72rem;color:#e0e0e0;margin-top:4px}
 .btn-manual-start{background:#00d26a;color:#0f0f1b;border:0;padding:6px 10px;font-size:.72rem;font-weight:bold;border-radius:5px;margin-top:5px}
 
 .uac-logo-container{position:absolute;top:12px;right:15px;z-index:20;background:rgba(15,15,27,.88);padding:6px 12px;border-radius:10px;display:flex;align-items:center;border:1px solid rgba(0,210,106,.4)}
 .uac-logo-container img{height:46px;width:auto;object-fit:contain}
-
-/* Indicador visual de Actualización 1.1 */
-.update-badge{position:absolute;top:12px;left:15px;z-index:20;background:rgba(0,210,106,0.2);color:#00d26a;padding:6px 12px;border-radius:8px;font-size:.75rem;font-weight:bold;border:1px solid rgba(0,210,106,.4)}
 
 .card{background:#141422;padding:6px 10px;border-radius:6px;border:1px solid #303050}
 .card h3{font-size:.72rem;color:#00d26a;text-transform:uppercase;margin-bottom:3px}
@@ -72,7 +115,7 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .day-card.unlocked{opacity:1;cursor:pointer}
 .day-state{font-size:.58rem;color:#a0a0c0;margin-top:2px}
 body.espejo *{pointer-events:none!important}
-body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,body.espejo #avisoMedico,body.espejo #doctorEmergencyPanel,body.espejo #connectionStatus,body.espejo #callStatus,body.espejo #mqttStatus{display:none!important}
+body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-switcher,body.espejo #vozEstado,body.espejo #avisoMedico,body.espejo #doctorEmergencyPanel,body.espejo #connectionStatus,body.espejo #callStatus,body.espejo #mqttStatus{display:none!important}
 .day-card.unlocked:hover{border-color:#00d26a;background:rgba(0,210,106,.05)}
 .day-card.active{border-color:#00d26a;background:rgba(0,210,106,.18);opacity:1}
 .day-num{font-weight:bold;color:#00d26a;font-size:.68rem}
@@ -95,10 +138,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
 .action-btn{padding:7px;font-size:.72rem;font-weight:bold;border-radius:5px;flex:1}
 .sos-btn{background:rgba(255,77,77,.2);color:#ff4d4d;border:1px solid #ff4d4d}
 .exit-btn{background:transparent;color:#ff6b6b;border:1px solid #ff6b6b}
-.call-btn{background:#00d26a;color:#101020;border:0}
-.hang-btn{background:#ff4d4d;color:white;border:0;display:none}
 
-#poseCanvas{position:absolute;inset:0;width:100%;height:75vh;pointer-events:none;transform:scaleX(-1);z-index:15;}
 #connectionStatus{font-size:.65rem;color:#ffd166;margin-top:3px}
 #callStatus{font-size:.7rem;color:#00d26a;margin-top:3px}
 
@@ -107,8 +147,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
  .left-panel,.right-panel{width:100%;height:75vh}
  .right-panel{height:auto;min-height:70vh}
  .avatar-container{min-height:450px}
- .right-panel video{height:55vh}
- #poseCanvas{height:55vh}
+ .video-stage{height:55vh}
 }
 </style>
 </head>
@@ -131,13 +170,12 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
    <input type="text" id="patLoginCedula" placeholder="Ej: 1045238910" value="1045238910">
   </div>
 
-  <button class="main-btn" onclick="loginPaciente()">Ingresar a mi Terapia</button>
+  <button type="button" class="main-btn" onclick="loginPaciente()">Ingresar a mi Terapia</button>
   <p id="loginError" class="error-msg">Cédula no encontrada en el sistema clínico.</p>
  </div>
 </div>
 
 <div id="patientAppContainer">
-
 
  <div class="left-panel">
 
@@ -182,12 +220,29 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
 
    <div class="telemetry-item">
     <span class="telemetry-label">Seguimiento:</span>
-    <span class="telemetry-value" id="poseStatus">Inactivo</span>
+    <span class="telemetry-value" id="poseStatus">En espera (saludo)</span>
    </div>
 
    <div id="connectionStatus">Servidor: comprobando...</div>
    <div id="callStatus">Videollamada: sin iniciar</div>
    <div id="mqttStatus" style="font-size:.65rem;color:#ffd166;margin-top:3px">Sensores: sin iniciar</div>
+  </div>
+
+  <div class="movement-switcher">
+   <div class="movement-switcher-title">4 Movimientos · 5 reps c/u</div>
+   <div class="movement-status-sub" id="ejercicioActualLabel">Ejercicio 1/4: Brazos al frente y abajo · Rep 0/5</div>
+   <button type="button" id="btnMov1" class="movement-btn active" onclick="seleccionarEjercicioManual(0)">
+    1. Brazos al frente y abajo (5 reps)
+   </button>
+   <button type="button" id="btnMov2" class="movement-btn" onclick="seleccionarEjercicioManual(1)">
+    2. Brazos arriba y abajo (5 reps)
+   </button>
+   <button type="button" id="btnMov3" class="movement-btn" onclick="seleccionarEjercicioManual(2)">
+    3. Sentadillas (5 reps)
+   </button>
+   <button type="button" id="btnMov4" class="movement-btn" onclick="seleccionarEjercicioManual(3)">
+    4. Marcar el paso (5 reps)
+   </button>
   </div>
 
   <div class="avatar-container">
@@ -204,14 +259,15 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
    </div>
   </div>
 
-  <div class="precision-panel">
-   <div class="precision-title">Contador de movimientos detectados</div>
-   <div class="precision-value" id="repCounter">0</div>
+  <div id="precisionPanel" class="precision-panel">
+   <div class="precision-title">Repeticiones del ejercicio (5 max)</div>
+   <div class="precision-value" id="repCounter">0 / 5</div>
+   <div id="countEstadoBadge" class="count-badge-estado">EN ESPERA · COMENZAR</div>
 
    <div class="feedback-text" id="feedbackMessage">
     Di "Comenzar" o utiliza el botón para iniciar.
    </div>
-   <button class="btn-manual-start" onclick="forzarInicioTerapia()">▶ Comenzar terapia</button>
+   <button type="button" class="btn-manual-start" onclick="forzarInicioTerapia()">▶ Comenzar terapia</button>
   </div>
 
  </div>
@@ -221,9 +277,19 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
    <img src="./escudo_uac.png" alt="Escudo UAC">
   </div>
 
-  <div style="position:relative; width:100%; height:75vh;">
-   <video id="webcam" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; transform:scaleX(-1); background:#080810; display:block;"></video>
-   <!-- Canvas de esqueleto posicionado directamente encima del video de la derecha -->
+  <div class="video-stage">
+   <div class="hands-badge" id="handsCountBadge"></div>
+   <div class="support-banner" id="supportBanner">😊 ¡Excelente ritmo, tu recuperación avanza paso a paso!</div>
+
+   <!-- Reloj de descanso de 1 minuto entre ejercicios -->
+   <div class="rest-timer-overlay" id="restTimerOverlay">
+    <div class="rest-timer-title">⏱️ Tiempo de descanso</div>
+    <div class="rest-timer-clock" id="restTimerClock">01:00</div>
+    <div class="rest-timer-sub" id="restTimerNextLabel">Prepárate para el siguiente ejercicio</div>
+    <button type="button" class="btn-skip-rest" onclick="saltarDescanso()">Continuar ahora ▶</button>
+   </div>
+
+   <video id="webcam" autoplay playsinline muted></video>
    <canvas id="poseCanvas"></canvas>
   </div>
 
@@ -260,17 +326,16 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
    </div>
 
    <div class="ai-speech-bubble">
-    <div class="ai-speech-header">Soy tu asistente - UAC</div>
+    <div class="ai-speech-header">Acompañamiento Empático en Tiempo Real - UAC</div>
     <div class="ai-speech-text" id="speechText">Inicia sesión para comenzar.</div>
    </div>
 
    <div id="vozEstado" style="font-size:.65rem;color:#a0a0c0;margin:4px 0 8px;"></div>
 
    <div class="action-row">
-    <button class="action-btn sos-btn" onclick="simularAlertaClinica()">🚨 Ayuda Médica (SOS)</button>
-    <button class="action-btn exit-btn" onclick="cerrarSesionPaciente()">🚪 Salir</button>
+    <button type="button" class="action-btn sos-btn" onclick="simularAlertaClinica()">🚨 Ayuda Médica (SOS)</button>
+    <button type="button" class="action-btn exit-btn" onclick="cerrarSesionPaciente()">🚪 Salir</button>
    </div>
-
 
   </div>
  </div>
@@ -285,7 +350,111 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo #vozEstado,bod
 
 let recognition = null;
 let aiState = "ESPERANDO";
+let evaluacionHabilitada = false;
 let currentRep = 0;
+let totalRepsRutina = 0;
+
+const REPS_POR_EJERCICIO = 5;
+const PALABRAS_CONTEO = ["uno", "dos", "tres", "cuatro", "cinco"];
+
+// Configuración del descanso de 1 minuto entre ejercicios
+const TIEMPO_DESCANSO_SEG = 60;
+let enDescanso = false;
+let segundosDescansoRestantes = TIEMPO_DESCANSO_SEG;
+let intervaloDescanso = null;
+let siguienteEjercicioPendiente = null;
+
+// Acompañamiento empático en tiempo real: Refuerzo Positivo y Corrección sin Alarma
+const MENSAJES_REFUERZO_POSITIVO = [
+ "¡Excelente ritmo, tu recuperación avanza paso a paso!",
+ "¡Muy bien hecho! Tu constancia impulsa tu recuperación.",
+ "¡Vas genial! Mantén ese movimiento controlado y seguro."
+];
+
+const MENSAJE_CORRECCION_SIN_ALARMA =
+ "Baja un poco los hombros y sigue el ritmo del avatar.";
+
+// Sensibilidad ajustable (grados por segundo) para detección de movimientos bruscos
+const UMBRAL_VELOCIDAD_BRUSCA_GPS = 280;
+const COOLDOWN_AVISO_BRUSCO_MS = 3500;
+const COOLDOWN_MENSAJE_ANIMO_MS = 3200;
+
+const EJERCICIOS_RUTINA = [
+ {
+  id: "brazos_frente_abajo",
+  nombre: "Brazos al frente y abajo",
+  corto: "Brazos al frente y abajo",
+  instruccion: "Ejercicio 1: Brazos al frente y abajo. Lleva tus brazos al frente despacio ... y bájalos con control.",
+  btnId: "btnMov1",
+  duracionCiclo: 3.2,
+  mensajeAnimo: MENSAJE_CORRECCION_SIN_ALARMA
+ },
+ {
+  id: "brazos_arriba_abajo",
+  nombre: "Brazos arriba y abajo (alterno / completo)",
+  corto: "Brazos arriba y abajo",
+  instruccion: "Ejercicio 2: Brazos arriba y abajo. Sube los brazos con suavidad ... y bájalos sin apuros.",
+  btnId: "btnMov2",
+  duracionCiclo: 3.4,
+  mensajeAnimo: MENSAJE_CORRECCION_SIN_ALARMA
+ },
+ {
+  id: "sentadillas",
+  nombre: "Sentadillas (baja cadera hacia rodillas y sube)",
+  corto: "Sentadillas",
+  instruccion: "Ejercicio 3: Sentadillas. Baja un poco la cadera hacia las rodillas ... y sube despacio.",
+  btnId: "btnMov3",
+  duracionCiclo: 3.6,
+  mensajeAnimo: "Baja un poco los hombros y sigue el ritmo del avatar con suavidad."
+ },
+ {
+  id: "marcar_paso",
+  nombre: "Marcar el paso (elevación alternada de rodillas)",
+  corto: "Marcar el paso",
+  instruccion: "Ejercicio 4: Marcar el paso. Eleva una rodilla ... y luego la otra a un ritmo tranquilo.",
+  btnId: "btnMov4",
+  duracionCiclo: 3.2,
+  mensajeAnimo: "Baja un poco los hombros y sigue el ritmo del avatar sin apuros."
+ }
+];
+
+let indiceEjercicioActual = 0;
+let repEjercicioActual = 0;
+let tiempoEnEjercicio = 0;
+let avanceSecuencialActivo = true;
+
+let estadoVisualEsqueleto = "original";
+let timerResetColorEsqueleto = null;
+let timerOcultarBannerApoyo = null;
+let ultimoMensajeAnimo = 0;
+let ultimoRepDetectadoMs = 0;
+
+// Prevención inmediata de movimientos bruscos (Seguridad Esternal) con suavizado
+let anguloSuavizadoHombro = null;
+let ultimoAnguloHombro = null;
+let ultimoTiempoAnguloMs = 0;
+let ultimoAvisoBruscoMs = 0;
+
+let huboSubidaBrazos = false;
+let huboBajadaBrazos = false;
+let picoSubidaBrazo = -999;
+let valleBajadaBrazo = 999;
+
+let huboSubidaArriba = false;
+let huboBajadaArriba = false;
+let picoBrazoArriba = -999;
+let valleBrazoArriba = 999;
+
+let huboBajadaSentadilla = false;
+let huboSubidaSentadilla = false;
+let hipYBase = null;
+let hipYMuyBajo = 0;
+
+let subioRodillaIzq = false;
+let subioRodillaDer = false;
+let picoElevacionRodilla = -999;
+
+let ultimoResultadoCicloValido = false;
 
 let diaActivoSeleccionado = null;
 let maxUnlockedDay = 1;
@@ -296,10 +465,13 @@ let fbxMixer = null;
 let fbxModel = null;
 let animationActions = [];
 
-let pose = null;
-let poseCamera = null;
-let poseReady = false;
-let lastPoseResults = null;
+let avatarRig = null;
+
+let poseLandmarker = null;
+let handLandmarker = null;
+let detectorRunning = false;
+let lastDetectorVideoTime = -1;
+let detectorAnimFrame = null;
 
 let pacienteActual = null;
 let socket = null;
@@ -314,9 +486,7 @@ let brazoArriba = false;
 let ultimaRepeticion = 0;
 let sessionResults = [];
 
-let speechQueue = [];
 let speechQueueTimer = null;
-let speakingNumber = false;
 let sesionGuardada = false;
 
 let RTC_CONFIGURATION = {
@@ -342,9 +512,9 @@ let diasTotalActual = 0;
 let diaInicioActual = null;
 let espejoEstado = "ESPERANDO";
 let espejoAnimando = false;
+let espejoEjercicioIdx = 0;
+let espejoEnDescanso = false;
 
-/* Modo espejo: el portal médico abre esta misma página dentro de un marco
-   (?espejo=CEDULA) para mostrar exactamente lo que ve el paciente. */
 const PARAM_ESPEJO = new URLSearchParams(location.search).get("espejo");
 
 if(PARAM_ESPEJO){
@@ -352,8 +522,6 @@ if(PARAM_ESPEJO){
  window.addEventListener("load",()=>iniciarModoEspejo(PARAM_ESPEJO));
 }
 
-/* Pide al servidor la lista de servidores STUN/TURN (así las claves
-   de TURN no quedan escritas en el HTML). Si falla, se usa solo STUN. */
 async function cargarConfiguracionIce(){
  if(iceCargado) return;
  try{
@@ -367,6 +535,39 @@ async function cargarConfiguracionIce(){
   }
  }catch(error){
   console.warn("No se pudo leer /api/ice, se usa solo STUN:",error);
+ }
+}
+
+function limpiarEstadoEvaluacionPrevia(){
+ aiState = "ESPERANDO";
+ evaluacionHabilitada = false;
+ detenerTemporizadorDescanso();
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
+ anguloSuavizadoHombro = null;
+ ultimoAnguloHombro = null;
+ ultimoTiempoAnguloMs = 0;
+ ultimoRepDetectadoMs = 0;
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
+ actualizarBadgeEstado();
+}
+
+function actualizarBadgeEstado(){
+ const badge = document.getElementById("countEstadoBadge");
+ if(!badge) return;
+ if(aiState !== "TERAPIA"){
+  badge.innerText = "EN ESPERA · DI COMENZAR";
+ }else if(enDescanso){
+  badge.innerText = `DESCANSO · ${formatearTiempoReloj(segundosDescansoRestantes)}`;
+ }else if(!evaluacionHabilitada){
+  badge.innerText = "EXPLICANDO EJERCICIO · PAUSA";
+ }else if(estadoVisualEsqueleto === "bien"){
+  badge.innerText = "BIEN · REFUERZO POSITIVO";
+ }else if(estadoVisualEsqueleto === "mal"){
+  badge.innerText = "POR AJUSTAR · CORRECCIÓN SUAVE";
+ }else{
+  badge.innerText = "EVALUANDO · EN MOVIMIENTO";
  }
 }
 
@@ -386,7 +587,6 @@ function mezclarSesionesLocales(cedula,sesionesServidor){
 }
 
 async function loginPaciente(){
-
  const cedulaInput = document.getElementById("patLoginCedula").value.trim();
  const errorEl = document.getElementById("loginError");
 
@@ -396,11 +596,9 @@ async function loginPaciente(){
  }
 
  try{
-
   let encontrado = null;
   let servidorRespondio = false;
 
-  // 1) Se busca primero en el servidor (así funciona desde cualquier dispositivo)
   try{
    const r = await fetch("/api/paciente/login",{
     method:"POST",
@@ -432,9 +630,7 @@ async function loginPaciente(){
    }catch(e){}
   }
 
-  // 2) Solo si el servidor no responde, se usan los datos de este navegador
   if(!encontrado && !servidorRespondio){
-
    const baseRaw = localStorage.getItem("uac_base_pacientes");
    const basePacientes = baseRaw ? JSON.parse(baseRaw) : [];
 
@@ -467,16 +663,14 @@ async function loginPaciente(){
   cargarDashboardPaciente(encontrado);
 
  }catch(error){
-
   console.error("Error leyendo los datos del paciente:",error);
   alert("No fue posible leer los datos del paciente. Revisa el registro clínico.");
-
  }
 }
 
 async function cargarDashboardPaciente(data){
-
  pacienteActual = data;
+ limpiarEstadoEvaluacionPrevia();
 
  document.getElementById("patientLoginSection").style.display = "none";
  document.getElementById("patientAppContainer").style.display = "flex";
@@ -504,26 +698,25 @@ async function cargarDashboardPaciente(data){
  const totalDays = Math.floor((dEnd-dStart)/86400000)+1;
 
  const savedMaxDay = localStorage.getItem(`uac_max_day_${p.documento}`);
-
  maxUnlockedDay = savedMaxDay ? parseInt(savedMaxDay,10) : 1;
 
  cargarTerapiasConfig(data);
  renderizarSecuenciaDias(totalDays,dStart);
  seleccionarDiaPorDefecto(totalDays,dStart);
+ actualizarIndicadoresEjercicio();
 
  iniciarConexionServidor();
  iniciarMQTT();
  init3DAvatar();
  await initCamera();
- iniciarSeguimientoCorporal();
+ await iniciarSeguimientoCorporal();
 
  const saludo =
-  `Hola ${p.nombres || ""}. Soy tu asistente. Estoy aquí para acompañarte durante tu sesión. Di comenzar cuando estés preparado.`;
+  `Hola ${p.nombres || ""}. Soy tu asistente. Estoy aquí para acompañarte durante tu sesión. ... Di comenzar cuando estés listo.`;
 
  actualizarDialogo(saludo);
- hablarIA(saludo,()=>iniciarReconocimientoVoz());
+ hablarIA(saludo,()=>iniciarReconocimientoVoz(), 0.94);
 
- // Si la voz del asistente no pudo reproducirse, igual se activa el micrófono
  setTimeout(()=>{
   if(!vozActiva && !vozBloqueada){
    iniciarReconocimientoVoz();
@@ -536,17 +729,14 @@ async function cargarDashboardPaciente(data){
 ========================================================= */
 
 function fechaLocal(date){
-
  const y = date.getFullYear();
  const m = String(date.getMonth()+1).padStart(2,"0");
  const d = String(date.getDate()).padStart(2,"0");
-
  return `${y}-${m}-${d}`;
 }
 
 function cargarTerapiasConfig(data){
  let cfg = data.terapias;
-
  if(!cfg){
   try{
    cfg = JSON.parse(localStorage.getItem(`uac_terapias_${data.paciente.documento}`) || "null");
@@ -554,7 +744,6 @@ function cargarTerapiasConfig(data){
    cfg = null;
   }
  }
-
  terapiasConfig = cfg || {};
 }
 
@@ -569,8 +758,6 @@ function leerSesionesPaciente(){
  }
 }
 
-/* Estado de una terapia: la fecha programada la habilita sola, salvo que
-   el médico la haya habilitado o bloqueado a mano. */
 function infoTerapiaDia(n,fechaBase){
  const cfg = terapiasConfig[n] || {};
  const programada = cfg.programada || fechaBase;
@@ -586,7 +773,6 @@ function infoTerapiaDia(n,fechaBase){
 }
 
 function renderizarSecuenciaDias(totalDays,dStart){
-
  diasTotalActual = totalDays;
  diaInicioActual = dStart;
 
@@ -597,7 +783,6 @@ function renderizarSecuenciaDias(totalDays,dStart){
  let habilitadas = 0;
 
  for(let i=0;i<totalDays;i++){
-
   const currentDate = new Date(dStart);
   currentDate.setDate(dStart.getDate()+i);
 
@@ -652,12 +837,10 @@ function refrescarTerapias(){
 }
 
 function seleccionarDiaPorDefecto(totalDays,dStart){
-
  let primero = null;
  let pendiente = null;
 
  for(let i=0;i<totalDays;i++){
-
   const d = new Date(dStart);
   d.setDate(dStart.getDate()+i);
 
@@ -673,7 +856,7 @@ function seleccionarDiaPorDefecto(totalDays,dStart){
  const elegido = pendiente || primero;
 
  if(elegido){
-  seleccionarDiaSecuencia(elegido.n,elegido.ds);
+  seleccionarDiaSecuencia(elegido.n,elegido.ds,true);
  }else{
   diaActivoSeleccionado = null;
   refrescarTerapias();
@@ -697,8 +880,7 @@ function aplicarTerapiasDelMedico(terapias){
  actualizarDialogo("Tu médico actualizó tus terapias.");
 }
 
-function seleccionarDiaSecuencia(numDia,fechaStr){
-
+function seleccionarDiaSecuencia(numDia,fechaStr,silencioso = false){
  if(!infoTerapiaDia(numDia,fechaStr).habilitada)return;
 
  diaActivoSeleccionado = {numDia,fechaStr};
@@ -711,15 +893,16 @@ function seleccionarDiaSecuencia(numDia,fechaStr){
 
  if(targetCard)targetCard.classList.add("active");
 
- actualizarDialogo(`Día ${numDia} seleccionado. Di comenzar cuando estés preparado.`);
+ if(!silencioso && aiState !== "TERAPIA"){
+  actualizarDialogo(`Día ${numDia} seleccionado. Di comenzar cuando estés listo.`);
+ }
 }
 
 /* =========================================================
-   CÁMARA DEL PACIENTE
+   CÁMARA DEL PACIENTE (640x480 PARA RESPUESTA MÁS RÁPIDA)
 ========================================================= */
 
 async function initCamera(){
-
  const video = document.getElementById("webcam");
 
  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -728,29 +911,21 @@ async function initCamera(){
  }
 
  try{
-
   localStream = await navigator.mediaDevices.getUserMedia({
-   video:{width:{ideal:1280},height:{ideal:720}},
+   video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},facingMode:"user"},
    audio:true
   });
-
  }catch(error){
-
   console.warn("No se pudo acceder a cámara y micrófono:",error);
 
   try{
-
    localStream = await navigator.mediaDevices.getUserMedia({
-    video:true,
+    video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},facingMode:"user"},
     audio:false
    });
-
   }catch(secondError){
-
    console.error("No se pudo abrir la cámara:",secondError);
-
    actualizarDialogo("No se detectó una cámara disponible. Puedes revisar el permiso de cámara del navegador.");
-
    return;
   }
  }
@@ -764,167 +939,200 @@ async function initCamera(){
  }
 }
 
-
 /* =========================================================
-   ASISTENTE DE VOZ
+   ASISTENTE DE VOZ CON PAUSAS E INSTRUCCIÓN ANTES DE EVALUAR
 ========================================================= */
 
-let numeroConteoVoz = 0;
-let numeroEnReproduccion = null;
-let conteoVozActivo = false;
-
 function detenerColaVoz(){
-
  clearTimeout(speechQueueTimer);
  speechQueueTimer = null;
-
- speechQueue = [];
- speakingNumber = false;
-
- numeroConteoVoz = 0;
- numeroEnReproduccion = null;
- conteoVozActivo = false;
 }
 
-function hablarIA(texto,callback){
+function dividirFrasesConPausa(texto){
+ return String(texto || "")
+  .split(/\.\.\.|(?<=[.!?])\s+/)
+  .map(s => s.trim())
+  .filter(Boolean);
+}
 
+function hablarSecuenciaConPausas(partes, alTerminarTodo, rate = 0.94, pausaEntreMs = 450){
  detenerColaVoz();
-
  if(!("speechSynthesis" in window)){
-  if(callback)callback();
+  if(alTerminarTodo) alTerminarTodo();
   return;
  }
 
  window.speechSynthesis.cancel();
-
- const utterance = new SpeechSynthesisUtterance(texto);
-
- utterance.lang = "es-ES";
- utterance.rate = 1;
- utterance.pitch = 1;
-
- if(callback){
-  utterance.onend = callback;
- }
-
- window.speechSynthesis.speak(utterance);
-}
-
-function actualizarDialogo(texto){
-
- document.getElementById("speechText").innerText = texto;
-}
-
-// Inicia el conteo desde 1.
-function iniciarConteoVoz(){
-
- if(!("speechSynthesis" in window))return;
-
- numeroConteoVoz = 0;
- numeroEnReproduccion = null;
- conteoVozActivo = true;
- speakingNumber = false;
-
- reproducirSiguienteNumero();
-}
-
-// Pronuncia del 1 al 5.
-function reproducirSiguienteNumero(){
-
- if(aiState !== "TERAPIA" || !conteoVozActivo)return;
-
- if(speakingNumber)return;
-
- // Al completar el número 5, finaliza la sesión.
- if(numeroConteoVoz >= 5){
-
-  conteoVozActivo = false;
-
-  finalizarTerapia();
-
+ const cola = Array.isArray(partes) ? partes.filter(Boolean) : [String(partes || "")];
+ if(cola.length === 0){
+  if(alTerminarTodo) alTerminarTodo();
   return;
  }
 
- speakingNumber = true;
-
- // Si se interrumpió un número, vuelve a pronunciarlo.
- if(numeroEnReproduccion === null){
-  numeroEnReproduccion = numeroConteoVoz + 1;
- }
-
- const numero = numeroEnReproduccion;
-
- const utterance = new SpeechSynthesisUtterance(String(numero));
-
- utterance.lang = "es-ES";
- utterance.rate = 1;
- utterance.pitch = 1;
-
- utterance.onend = ()=>{
-
-  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
-
-  numeroConteoVoz = numero;
-  numeroEnReproduccion = null;
-  speakingNumber = false;
-
-  // Después del número 5, finalizar inmediatamente.
-  if(numeroConteoVoz >= 5){
-   reproducirSiguienteNumero();
+ let idx = 0;
+ const hablarSiguiente = ()=>{
+  if(aiState === "CERRADA" || aiState === "PAUSADA") return;
+  if(idx >= cola.length){
+   if(alTerminarTodo) alTerminarTodo();
    return;
   }
-
-  // Esperar 3 segundos antes del siguiente número.
-  speechQueueTimer = setTimeout(()=>{
-   reproducirSiguienteNumero();
-  },3000);
-
+  const frase = cola[idx++];
+  const u = new SpeechSynthesisUtterance(frase);
+  u.lang = "es-ES";
+  u.rate = rate;
+  u.pitch = 1;
+  u.onend = ()=>{
+   if(aiState === "CERRADA" || aiState === "PAUSADA") return;
+   speechQueueTimer = setTimeout(hablarSiguiente, pausaEntreMs);
+  };
+  u.onerror = ()=>{
+   if(aiState === "CERRADA" || aiState === "PAUSADA") return;
+   speechQueueTimer = setTimeout(hablarSiguiente, pausaEntreMs);
+  };
+  window.speechSynthesis.speak(u);
  };
 
- utterance.onerror = ()=>{
+ hablarSiguiente();
+}
 
-  if(aiState !== "TERAPIA" || !conteoVozActivo)return;
+function hablarIA(texto,callback,rate = 0.94){
+ const frases = dividirFrasesConPausa(texto);
+ hablarSecuenciaConPausas(frases, callback, rate, 420);
+}
 
-  speakingNumber = false;
+function explicarEjercicioYActivarEvaluacion(ej, diaNum = null){
+ evaluacionHabilitada = false;
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
+ actualizarBadgeEstado();
 
-  // Reintentar el mismo número.
-  speechQueueTimer = setTimeout(()=>{
-   reproducirSiguienteNumero();
-  },3000);
+ const encabezado = diaNum
+  ? `Comenzamos la terapia del día ${diaNum}. ...`
+  : `Listo el descanso, continuamos con el siguiente ejercicio. ...`;
 
- };
+ const textoExplicacion = `${encabezado} ${ej.instruccion}`;
+ actualizarDialogo(textoExplicacion);
+ document.getElementById("feedbackMessage").innerText =
+  "Escuchando explicación del ejercicio...";
 
+ hablarSecuenciaConPausas(
+  dividirFrasesConPausa(textoExplicacion),
+  ()=>{
+   if(aiState !== "TERAPIA" || enDescanso) return;
+   evaluacionHabilitada = true;
+   anguloSuavizadoHombro = null;
+   ultimoAnguloHombro = null;
+   ultimoTiempoAnguloMs = 0;
+   resetearMetricasCicloDetector();
+   actualizarBadgeEstado();
+   document.getElementById("feedbackMessage").innerText =
+    `Evaluando ${ej.corto} (${repEjercicioActual}/${REPS_POR_EJERCICIO})...`;
+  },
+  0.94,
+  480
+ );
+}
+
+function hablarApoyoRapido(texto, permitirEnDescanso = false){
+ if(aiState !== "TERAPIA") return;
+ if(!permitirEnDescanso && !evaluacionHabilitada) return;
+ if(!("speechSynthesis" in window)) return;
+ if(window.speechSynthesis.speaking) return;
+
+ const utterance = new SpeechSynthesisUtterance(texto);
+ utterance.lang = "es-ES";
+ utterance.rate = 0.96;
+ utterance.pitch = 1.02;
  window.speechSynthesis.speak(utterance);
 }
 
+function mostrarBannerAcompanamiento(texto, tipo = "correccion"){
+ if(aiState !== "TERAPIA" || !evaluacionHabilitada) return;
+ const banner = document.getElementById("supportBanner");
+ if(!banner) return;
+
+ const esPositivo = tipo === "positivo";
+ banner.innerText = (esPositivo ? "😊 " : "🤍 ") + texto;
+ banner.classList.remove("show", "positive");
+ if(esPositivo){
+  banner.classList.add("positive");
+ }
+ void banner.offsetWidth;
+ banner.classList.add("show");
+
+ if(timerOcultarBannerApoyo){
+  clearTimeout(timerOcultarBannerApoyo);
+ }
+ timerOcultarBannerApoyo = setTimeout(()=>{
+  banner.classList.remove("show", "positive");
+ }, 3200);
+}
+
+function narrarConteoRepeticion(repNum, siguienteEjercicio = null, refuerzoPositivo = ""){
+ if(aiState !== "TERAPIA") return;
+ const palabra = PALABRAS_CONTEO[repNum - 1] || String(repNum);
+ const textoConteo = palabra.charAt(0).toUpperCase() + palabra.slice(1) + ".";
+
+ if(!("speechSynthesis" in window)){
+  if(siguienteEjercicio){
+   iniciarDescansoEntreEjercicios(siguienteEjercicio);
+  }
+  return;
+ }
+
+ window.speechSynthesis.cancel();
+ const uConteo = new SpeechSynthesisUtterance(textoConteo);
+ uConteo.lang = "es-ES";
+ uConteo.rate = 0.94;
+ uConteo.pitch = 1;
+
+ uConteo.onend = ()=>{
+  if(aiState !== "TERAPIA") return;
+  if(siguienteEjercicio){
+   speechQueueTimer = setTimeout(()=>{
+    if(aiState !== "TERAPIA") return;
+    iniciarDescansoEntreEjercicios(siguienteEjercicio);
+   }, 450);
+  }else if(refuerzoPositivo && aiState === "TERAPIA"){
+   speechQueueTimer = setTimeout(()=>{
+    if(aiState !== "TERAPIA" || window.speechSynthesis.speaking) return;
+    const uRef = new SpeechSynthesisUtterance(refuerzoPositivo);
+    uRef.lang = "es-ES";
+    uRef.rate = 0.95;
+    window.speechSynthesis.speak(uRef);
+   }, 350);
+  }
+ };
+
+ window.speechSynthesis.speak(uConteo);
+}
+
+function actualizarDialogo(texto){
+ document.getElementById("speechText").innerText = texto;
+}
 
 function iniciarReconocimientoVoz(){
-
  const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 
  if(!SpeechRecognition){
-  console.warn("Reconocimiento de voz no disponible en este navegador.");
   vozBloqueada = true;
   actualizarEstadoVoz("🎤 Este navegador no permite comandos de voz. Abre el portal del paciente en Chrome o Edge.");
   return;
  }
 
  if(recognition){
-  try{
-   recognition.stop();
-  }catch(e){}
+  try{ recognition.stop(); }catch(e){}
  }
 
  recognition = new SpeechRecognition();
-
  recognition.lang = "es-ES";
  recognition.continuous = true;
  recognition.interimResults = false;
 
  recognition.onstart = ()=>{
   vozActiva = true;
-  actualizarEstadoVoz("🎤 Voz activa: te estoy escuchando.");
+  actualizarEstadoVoz("🎤 Voz activa: te estoy escuchando (di \"Comenzar\" o \"Salir\").");
  };
 
  recognition.onerror = event=>{
@@ -939,40 +1147,26 @@ function iniciarReconocimientoVoz(){
  };
 
  recognition.onresult = event=>{
-
   const resultado = event.results[event.results.length-1];
   const crudo = resultado[0].transcript.trim();
-
   actualizarEstadoVoz(`🎤 Escuché: "${crudo}"`);
 
   const comando = interpretarComandoVoz(normalizarVoz(crudo));
-
   if(comando){
    ejecutarComandoTerapia(comando,"voz");
   }
-
  };
 
  recognition.onend = ()=>{
-
   vozActiva = false;
-
   if(aiState!=="CERRADA" && !vozBloqueada){
-
    setTimeout(()=>{
-
-    try{
-     recognition.start();
-    }catch(e){}
-
+    try{ recognition.start(); }catch(e){}
    },800);
-
   }
  };
 
- try{
-  recognition.start();
- }catch(e){}
+ try{ recognition.start(); }catch(e){}
 }
 
 function actualizarEstadoVoz(texto){
@@ -984,8 +1178,6 @@ function normalizarVoz(texto){
  return String(texto).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
-/* Traduce lo que dijo el paciente a un comando. El texto ya viene
-   en minúsculas y sin tildes. */
 function interpretarComandoVoz(t){
  if(/ayuda medic[oa]/.test(t) || /solicit\w*.*medico/.test(t) || /\b(sos|s o s)\b/.test(t)) return "ayuda";
  if(/\b(colgar|cuelga)\b/.test(t)) return "colgar";
@@ -999,20 +1191,19 @@ function interpretarComandoVoz(t){
 }
 
 function pausarTerapia(origen){
-
  if(aiState!=="TERAPIA") return;
 
- conteoGuardadoPausa = numeroConteoVoz;
+ conteoGuardadoPausa = repEjercicioActual;
  aiState = "PAUSADA";
-
+ evaluacionHabilitada = false;
  detenerColaVoz();
+ establecerEstadoVisualEsqueleto("original", 0);
+ actualizarBadgeEstado();
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
 
  if("speechSynthesis" in window){
   window.speechSynthesis.cancel();
- }
-
- if(fbxMixer && animationActions.length){
-  animationActions.forEach(action=>{ action.paused = true; });
  }
 
  const mensaje = origen==="medico"
@@ -1024,51 +1215,45 @@ function pausarTerapia(origen){
 }
 
 function continuarTerapia(origen){
-
  if(aiState!=="PAUSADA") return;
 
  aiState = "TERAPIA";
  brazoArriba = false;
+ anguloSuavizadoHombro = null;
+ ultimoAnguloHombro = null;
+ ultimoTiempoAnguloMs = 0;
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
+ actualizarIndicadoresEjercicio();
 
- if(fbxMixer && animationActions.length){
-  animationActions.forEach(action=>{ action.paused = false; });
+ if(enDescanso){
+  actualizarBadgeEstado();
+  const msg = `Reanudamos el descanso (${formatearTiempoReloj(segundosDescansoRestantes)} restantes).`;
+  document.getElementById("feedbackMessage").innerText = msg;
+  actualizarDialogo(msg);
+  return;
  }
 
- document.getElementById("feedbackMessage").innerText =
-  "Seguimiento corporal activo. Realiza el movimiento indicado.";
- actualizarDialogo("Continuamos con la terapia.");
-
- // Retoma el conteo donde se quedó
- numeroConteoVoz = conteoGuardadoPausa;
- numeroEnReproduccion = null;
- speakingNumber = false;
- conteoVozActivo = true;
-
- reproducirSiguienteNumero();
+ const ej = EJERCICIOS_RUTINA[indiceEjercicioActual] || EJERCICIOS_RUTINA[0];
+ explicarEjercicioYActivarEvaluacion(ej, null);
 }
 
-/* Empieza de nuevo: la sesión en curso se descarta (no se guarda) */
 function reiniciarTerapia(origen){
-
  if(aiState==="CERRADA") return;
 
  detenerColaVoz();
+ detenerTemporizadorDescanso();
 
  if("speechSynthesis" in window){
   window.speechSynthesis.cancel();
  }
 
- if(fbxMixer){
-  fbxMixer.stopAllAction();
- }
-
  aiState = "ESPERANDO";
+ evaluacionHabilitada = false;
  iniciarTerapia();
 }
 
-/* Un solo punto de entrada para voz, botones y médico */
 function ejecutarComandoTerapia(comando,origen){
-
  if(origen==="medico" && (comando==="ayuda" || comando==="colgar" || comando==="salir")) return;
 
  const verbosMedico = {
@@ -1084,7 +1269,6 @@ function ejecutarComandoTerapia(comando,origen){
  }
 
  switch(comando){
-
   case "iniciar":
    if(aiState==="REPOSO" || aiState==="ALERTA_MEDICA"){
     aiState = "ESPERANDO";
@@ -1099,7 +1283,11 @@ function ejecutarComandoTerapia(comando,origen){
    break;
 
   case "continuar":
-   continuarTerapia(origen);
+   if(enDescanso && aiState==="TERAPIA"){
+    saltarDescanso();
+   }else{
+    continuarTerapia(origen);
+   }
    break;
 
   case "reiniciar":
@@ -1137,413 +1325,817 @@ function forzarInicioTerapia(){
 }
 
 /* =========================================================
-   MEDIAPIPE - SEGUIMIENTO CORPORAL CORREGIDO
+   TEMPORIZADOR DE DESCANSO DE 1 MINUTO ENTRE EJERCICIOS
 ========================================================= */
 
-function iniciarSeguimientoCorporal(){
+function formatearTiempoReloj(seg){
+ const m = Math.floor(seg / 60);
+ const s = seg % 60;
+ return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
- if(typeof Pose==="undefined"){
+function detenerTemporizadorDescanso(){
+ if(intervaloDescanso){
+  clearInterval(intervaloDescanso);
+  intervaloDescanso = null;
+ }
+ enDescanso = false;
+ siguienteEjercicioPendiente = null;
 
-  console.error("MediaPipe Pose no se cargó.");
+ const overlay = document.getElementById("restTimerOverlay");
+ if(overlay) overlay.classList.remove("active");
 
-  document.getElementById("poseStatus").innerText = "No disponible";
+ const panel = document.getElementById("precisionPanel");
+ if(panel) panel.classList.remove("estado-descanso");
+}
 
-  document.getElementById("poseFeedback").innerText =
-   "No se pudo cargar MediaPipe. Comprueba tu conexión a Internet.";
+function iniciarDescansoEntreEjercicios(siguienteEj){
+ detenerTemporizadorDescanso();
+ enDescanso = true;
+ evaluacionHabilitada = false;
+ siguienteEjercicioPendiente = siguienteEj;
+ segundosDescansoRestantes = TIEMPO_DESCANSO_SEG;
 
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
+
+ const panel = document.getElementById("precisionPanel");
+ if(panel){
+  panel.classList.remove("estado-bien", "estado-mal");
+  panel.classList.add("estado-descanso");
+ }
+ actualizarBadgeEstado();
+
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
+
+ const overlay = document.getElementById("restTimerOverlay");
+ const clockEl = document.getElementById("restTimerClock");
+ const nextEl = document.getElementById("restTimerNextLabel");
+
+ if(clockEl) clockEl.innerText = formatearTiempoReloj(segundosDescansoRestantes);
+ if(nextEl) nextEl.innerText = `Siguiente ejercicio: ${siguienteEj.corto}`;
+ if(overlay) overlay.classList.add("active");
+
+ const msgDescanso =
+  `¡Muy bien hecho! Has terminado este ejercicio. ... Tómate un minuto de descanso. Respira profundo y relaja los hombros; en un minuto seguimos con ${siguienteEj.corto}.`;
+
+ document.getElementById("feedbackMessage").innerText =
+  `Descanso de 1 minuto (01:00) · Siguiente: ${siguienteEj.corto}`;
+ actualizarDialogo(msgDescanso);
+ hablarIA(msgDescanso, null, 0.94);
+
+ intervaloDescanso = setInterval(()=>{
+  if(aiState === "PAUSADA") return;
+  if(aiState !== "TERAPIA"){
+   detenerTemporizadorDescanso();
+   return;
+  }
+
+  segundosDescansoRestantes--;
+  const tiempoFmt = formatearTiempoReloj(Math.max(0, segundosDescansoRestantes));
+
+  if(clockEl){
+   clockEl.innerText = tiempoFmt;
+  }
+  document.getElementById("feedbackMessage").innerText =
+   `Descanso activo (${tiempoFmt}) · Siguiente: ${siguienteEj.corto}`;
+  actualizarBadgeEstado();
+
+  if(segundosDescansoRestantes === 10){
+   hablarApoyoRapido("Quedan diez segundos de descanso.", true);
+  }
+
+  if(segundosDescansoRestantes <= 0){
+   finalizarDescansoYContinuar();
+  }
+ }, 1000);
+}
+
+function finalizarDescansoYContinuar(){
+ const siguiente = siguienteEjercicioPendiente;
+ detenerTemporizadorDescanso();
+
+ if(aiState !== "TERAPIA" || !siguiente) return;
+ explicarEjercicioYActivarEvaluacion(siguiente, null);
+}
+
+function saltarDescanso(){
+ if(!enDescanso) return;
+ if("speechSynthesis" in window){
+  window.speechSynthesis.cancel();
+ }
+ finalizarDescansoYContinuar();
+}
+
+/* =========================================================
+   DETECTOR DE MOVIMIENTO: SOLO EVALÚA TRAS EXPLICAR EL EJERCICIO
+========================================================= */
+
+const FULL_BODY_CONNECTIONS = [
+ [11, 12],
+ [11, 13], [13, 15],
+ [12, 14], [14, 16],
+ [11, 23], [12, 24], [23, 24],
+ [23, 25], [25, 27],
+ [27, 29], [27, 31], [29, 31],
+ [24, 26], [26, 28],
+ [28, 30], [28, 32], [30, 32]
+];
+
+const BODY_JOINTS = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+
+function puedeEvaluarAhora(){
+ return aiState === "TERAPIA" && evaluacionHabilitada === true && !enDescanso;
+}
+
+function establecerEstadoVisualEsqueleto(nuevoEstado, duracionMs = 950){
+ if(timerResetColorEsqueleto){
+  clearTimeout(timerResetColorEsqueleto);
+  timerResetColorEsqueleto = null;
+ }
+
+ const estadoEfectivo = puedeEvaluarAhora() ? nuevoEstado : "original";
+ estadoVisualEsqueleto = estadoEfectivo;
+
+ const panel = document.getElementById("precisionPanel");
+ if(panel){
+  panel.classList.remove("estado-bien", "estado-mal");
+  if(estadoEfectivo === "bien") panel.classList.add("estado-bien");
+  if(estadoEfectivo === "mal") panel.classList.add("estado-mal");
+ }
+
+ actualizarBadgeEstado();
+
+ if((estadoEfectivo === "bien" || estadoEfectivo === "mal") && puedeEvaluarAhora()){
+  timerResetColorEsqueleto = setTimeout(()=>{
+   estadoVisualEsqueleto = "original";
+   if(panel) panel.classList.remove("estado-bien", "estado-mal");
+   actualizarBadgeEstado();
+  }, duracionMs);
+ }
+}
+
+function obtenerPaletaEsqueleto(){
+ if(puedeEvaluarAhora() && estadoVisualEsqueleto === "bien"){
+  return {
+   linea: "#10b981",
+   puntoRelleno: "#0f172a",
+   puntoBorde: "#34d399"
+  };
+ }
+
+ if(puedeEvaluarAhora() && estadoVisualEsqueleto === "mal"){
+  return {
+   linea: "#ef4444",
+   puntoRelleno: "#0f172a",
+   puntoBorde: "#f87171"
+  };
+ }
+
+ return {
+  linea: "#06b6d4",
+  puntoRelleno: "#e879f9",
+  puntoBorde: "#ffffff"
+ };
+}
+
+function resetearMetricasCicloDetector(){
+ huboSubidaBrazos = false;
+ huboBajadaBrazos = false;
+ picoSubidaBrazo = -999;
+ valleBajadaBrazo = 999;
+
+ huboSubidaArriba = false;
+ huboBajadaArriba = false;
+ picoBrazoArriba = -999;
+ valleBrazoArriba = 999;
+
+ huboBajadaSentadilla = false;
+ huboSubidaSentadilla = false;
+ hipYBase = null;
+ hipYMuyBajo = 0;
+
+ subioRodillaIzq = false;
+ subioRodillaDer = false;
+ picoElevacionRodilla = -999;
+
+ ultimoResultadoCicloValido = false;
+}
+
+function marcarMalYAnimar(mensajePersonalizado = null, esMovimientoBrusco = false){
+ if(!puedeEvaluarAhora()) return;
+ const mensaje = mensajePersonalizado || MENSAJE_CORRECCION_SIN_ALARMA;
+
+ establecerEstadoVisualEsqueleto("mal", 1050);
+ mostrarBannerAcompanamiento(mensaje, "correccion");
+ document.getElementById("feedbackMessage").innerText = mensaje;
+ actualizarDialogo(mensaje);
+
+ const ahora = Date.now();
+ if(ahora - ultimoMensajeAnimo >= COOLDOWN_MENSAJE_ANIMO_MS){
+  ultimoMensajeAnimo = ahora;
+  hablarApoyoRapido(mensaje);
+ }
+}
+
+function verificarMovimientoBrusco(anguloActual, ahoraMs){
+ if(!puedeEvaluarAhora()) return;
+ if(typeof anguloActual !== "number" || Number.isNaN(anguloActual)) return;
+
+ if(anguloSuavizadoHombro === null){
+  anguloSuavizadoHombro = anguloActual;
+  ultimoAnguloHombro = anguloActual;
+  ultimoTiempoAnguloMs = ahoraMs;
   return;
  }
 
- pose = new Pose({
+ anguloSuavizadoHombro = anguloSuavizadoHombro * 0.65 + anguloActual * 0.35;
 
-  locateFile:(file)=>{
-   return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+ if(ultimoAnguloHombro !== null && ultimoTiempoAnguloMs > 0){
+  const dtSeg = (ahoraMs - ultimoTiempoAnguloMs) / 1000;
+  if(dtSeg >= 0.08 && dtSeg <= 0.65){
+   const deltaGrados = Math.abs(anguloSuavizadoHombro - ultimoAnguloHombro);
+   const velocidad = deltaGrados / dtSeg;
+   if(deltaGrados >= 16 && velocidad > UMBRAL_VELOCIDAD_BRUSCA_GPS && (ahoraMs - ultimoAvisoBruscoMs) > COOLDOWN_AVISO_BRUSCO_MS){
+    ultimoAvisoBruscoMs = ahoraMs;
+    marcarMalYAnimar("Movimiento rápido detectado. " + MENSAJE_CORRECCION_SIN_ALARMA, true);
+   }
+  }
+ }
+
+ ultimoAnguloHombro = anguloSuavizadoHombro;
+ ultimoTiempoAnguloMs = ahoraMs;
+}
+
+function evaluarMovimientoEnCamara(lm){
+ if(!puedeEvaluarAhora()) return false;
+
+ const ej = EJERCICIOS_RUTINA[indiceEjercicioActual] || EJERCICIOS_RUTINA[0];
+ const lSh = lm[11];
+ const rSh = lm[12];
+ const lWr = lm[15];
+ const rWr = lm[16];
+ const lHip = lm[23];
+ const rHip = lm[24];
+ const lKnee = lm[25];
+ const rKnee = lm[26];
+
+ if(ej.id === "brazos_frente_abajo"){
+  const diffL = (lSh && lWr && (lSh.visibility ?? 1) > 0.25 && (lWr.visibility ?? 1) > 0.25)
+   ? (lSh.y - lWr.y) : -999;
+  const diffR = (rSh && rWr && (rSh.visibility ?? 1) > 0.25 && (rWr.visibility ?? 1) > 0.25)
+   ? (rSh.y - rWr.y) : -999;
+
+  const actualDiff = Math.max(diffL, diffR);
+  if(actualDiff === -999){
+   ultimoResultadoCicloValido = false;
+   return false;
   }
 
- });
+  if(actualDiff > picoSubidaBrazo) picoSubidaBrazo = actualDiff;
+  if(actualDiff < valleBajadaBrazo) valleBajadaBrazo = actualDiff;
 
- // Umbrales ajustados a 0.35 para máxima sensibilidad y detección fluida
- pose.setOptions({
+  if(actualDiff > -0.05){
+   huboSubidaBrazos = true;
+  }
+  if(huboSubidaBrazos && actualDiff < -0.08){
+   huboBajadaBrazos = true;
+  }
 
-  modelComplexity:1,
-  smoothLandmarks:true,
-  enableSegmentation:false,
-  smoothSegmentation:false,
-  minDetectionConfidence:.35,
-  minTrackingConfidence:.35
+  const esValido = huboSubidaBrazos && huboBajadaBrazos && ((picoSubidaBrazo - valleBajadaBrazo) >= 0.065);
+  ultimoResultadoCicloValido = esValido;
+  return esValido;
+ }
 
- });
+ if(ej.id === "brazos_arriba_abajo"){
+  const visL = lSh && lWr && (lSh.visibility ?? 1) > 0.25 && (lWr.visibility ?? 1) > 0.25;
+  const visR = rSh && rWr && (rSh.visibility ?? 1) > 0.25 && (rWr.visibility ?? 1) > 0.25;
 
- pose.onResults(procesarResultadosPose);
+  if(!visL && !visR){
+   ultimoResultadoCicloValido = false;
+   return false;
+  }
 
- const videoElement = document.getElementById("webcam");
+  const diffL = visL ? (lSh.y - lWr.y) : -999;
+  const diffR = visR ? (rSh.y - rWr.y) : -999;
+  const coordDiff = (visL && visR) ? ((diffL + diffR) / 2) : Math.max(diffL, diffR);
+  const maxBrazo = Math.max(diffL, diffR);
 
- poseCamera = new Camera(videoElement,{
+  if(maxBrazo > picoBrazoArriba) picoBrazoArriba = maxBrazo;
+  if(coordDiff < valleBrazoArriba) valleBrazoArriba = coordDiff;
 
-  onFrame:async()=>{
+  if(maxBrazo > 0.0){
+   huboSubidaArriba = true;
+  }
+  if(huboSubidaArriba && coordDiff < -0.075){
+   huboBajadaArriba = true;
+  }
 
-   if(pose && videoElement.readyState>=2){
-    await pose.send({image:videoElement});
+  const esValido = huboSubidaArriba && huboBajadaArriba && ((picoBrazoArriba - valleBrazoArriba) >= 0.09);
+  ultimoResultadoCicloValido = esValido;
+  return esValido;
+ }
+
+ if(ej.id === "sentadillas"){
+  if(!lHip || !rHip || !lKnee || !rKnee ||
+     (lHip.visibility ?? 1) < 0.25 || (rHip.visibility ?? 1) < 0.25 ||
+     (lKnee.visibility ?? 1) < 0.25 || (rKnee.visibility ?? 1) < 0.25){
+   ultimoResultadoCicloValido = false;
+   return false;
+  }
+
+  const hipY = (lHip.y + rHip.y) / 2;
+  const kneeY = (lKnee.y + rKnee.y) / 2;
+  const distanciaCaderaRodilla = kneeY - hipY;
+
+  if(hipYBase === null){
+   hipYBase = hipY;
+  }
+  if(!huboBajadaSentadilla && hipY < hipYBase){
+   hipYBase = THREE.MathUtils.lerp(hipYBase, hipY, 0.35);
+  }
+
+  const descenso = hipY - hipYBase;
+  if(descenso > hipYMuyBajo) hipYMuyBajo = descenso;
+
+  if(descenso >= 0.035 || distanciaCaderaRodilla < 0.15){
+   huboBajadaSentadilla = true;
+  }
+
+  if(huboBajadaSentadilla && descenso <= 0.02){
+   huboSubidaSentadilla = true;
+  }
+
+  const esValido = huboBajadaSentadilla && huboSubidaSentadilla && (hipYMuyBajo >= 0.035);
+  ultimoResultadoCicloValido = esValido;
+  return esValido;
+ }
+
+ if(ej.id === "marcar_paso"){
+  const visL = lHip && lKnee && (lHip.visibility ?? 1) > 0.25 && (lKnee.visibility ?? 1) > 0.25;
+  const visR = rHip && rKnee && (rHip.visibility ?? 1) > 0.25 && (rKnee.visibility ?? 1) > 0.25;
+
+  if(!visL && !visR){
+   ultimoResultadoCicloValido = false;
+   return false;
+  }
+
+  const elevL = visL ? (lHip.y - lKnee.y) : -999;
+  const elevR = visR ? (rHip.y - rKnee.y) : -999;
+  const mayorElev = Math.max(elevL, elevR);
+
+  if(mayorElev > picoElevacionRodilla) picoElevacionRodilla = mayorElev;
+  if(elevL > 0.015) subioRodillaIzq = true;
+  if(elevR > 0.015) subioRodillaDer = true;
+
+  const alternoOk = (subioRodillaIzq && subioRodillaDer) || (picoElevacionRodilla >= 0.035);
+  const esValido = (subioRodillaIzq || subioRodillaDer) && alternoOk;
+  ultimoResultadoCicloValido = esValido;
+  return esValido;
+ }
+
+ return false;
+}
+
+function esperarMediaPipeVision(){
+ return new Promise((resolve,reject)=>{
+  if(window.MediaPipeVision) return resolve(window.MediaPipeVision);
+  let intentos = 0;
+  const iv = setInterval(()=>{
+   intentos++;
+   if(window.MediaPipeVision){
+    clearInterval(iv);
+    resolve(window.MediaPipeVision);
+   }else if(intentos > 60){
+    clearInterval(iv);
+    reject(new Error("Tiempo agotado cargando MediaPipe Tasks Vision."));
    }
-
-  },
-
-  width:1280,
-  height:720
-
+  },100);
  });
+}
 
- poseCamera.start()
-  .then(()=>{
-   poseReady = true;
-   console.log("MediaPipe Camera iniciada correctamente.");
-  })
-  .catch((err)=>{
-   console.error("Error al iniciar MediaPipe Camera:", err);
+async function iniciarSeguimientoCorporal(){
+ const statusEl = document.getElementById("poseStatus");
+ statusEl.innerText = "Cargando detector...";
+
+ try{
+  const {PoseLandmarker, HandLandmarker, FilesetResolver} = await esperarMediaPipeVision();
+
+  const vision = await FilesetResolver.forVisionTasks(
+   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision,{
+   baseOptions:{
+    modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+    delegate:"GPU"
+   },
+   runningMode:"VIDEO",
+   numPoses:1,
+   minPoseDetectionConfidence:0.35,
+   minPosePresenceConfidence:0.35,
+   minTrackingConfidence:0.35
   });
+
+  handLandmarker = await HandLandmarker.createFromOptions(vision,{
+   baseOptions:{
+    modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+    delegate:"GPU"
+   },
+   runningMode:"VIDEO",
+   numHands:2,
+   minHandDetectionConfidence:0.35,
+   minTrackingConfidence:0.35
+  });
+
+  statusEl.innerText = puedeEvaluarAhora() ? "Evaluando" : "En espera (saludo)";
+  detectorRunning = true;
+  lastDetectorVideoTime = -1;
+  detectorAnimFrame = requestAnimationFrame(bucleDetector);
+
+ }catch(error){
+  console.error("Error al iniciar detector MediaPipe:",error);
+  statusEl.innerText = "Error en detector";
+  const pf = document.getElementById("poseFeedback");
+  if(pf) pf.innerText = "No se pudo cargar MediaPipe. Comprueba tu conexión a Internet.";
+ }
 }
 
 function calcularAngulo(a,b,c){
-
  const radians =
   Math.atan2(c.y-b.y,c.x-b.x) -
   Math.atan2(a.y-b.y,a.x-b.x);
 
  let angle = Math.abs(radians*180/Math.PI);
-
- if(angle>180)angle=360-angle;
-
+ if(angle>180) angle = 360-angle;
  return Math.round(angle);
 }
 
-function procesarResultadosPose(results){
+function bucleDetector(timestamp){
+ if(!detectorRunning) return;
 
- lastPoseResults = results;
-
- const canvas = document.getElementById("poseCanvas");
- const ctx = canvas.getContext("2d");
  const video = document.getElementById("webcam");
+ const canvas = document.getElementById("poseCanvas");
 
- if(!canvas || !video) return;
+ if(video && canvas && video.readyState >= 2 && poseLandmarker && handLandmarker){
+  const ctx = canvas.getContext("2d");
 
- // Sincronización exacta del canvas con las dimensiones del video de la webcam
- if(canvas.width!==video.videoWidth || canvas.height!==video.videoHeight){
+  if(canvas.width !== video.videoWidth || canvas.height !== video.videoHeight){
+   canvas.width = video.videoWidth || 640;
+   canvas.height = video.videoHeight || 480;
+  }
 
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
+  if(video.currentTime !== lastDetectorVideoTime){
+   lastDetectorVideoTime = video.currentTime;
+   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+   const poseRes = poseLandmarker.detectForVideo(video, timestamp);
+   const handRes = handLandmarker.detectForVideo(video, timestamp);
+
+   const evaluando = puedeEvaluarAhora();
+
+   if(poseRes.landmarks && poseRes.landmarks.length > 0){
+    const lm = poseRes.landmarks[0];
+
+    if(evaluando){
+     const esValidoAhora = evaluarMovimientoEnCamara(lm);
+
+     if(esValidoAhora && repEjercicioActual < REPS_POR_EJERCICIO){
+      const ahora = Date.now();
+      if(ahora - ultimoRepDetectadoMs >= 950){
+       ultimoRepDetectadoMs = ahora;
+       const ej = EJERCICIOS_RUTINA[indiceEjercicioActual] || EJERCICIOS_RUTINA[0];
+       registrarRepeticionEjercicio();
+       resetearMetricasCicloDetector();
+       tiempoEnEjercicio = repEjercicioActual * (ej.duracionCiclo || 3.2);
+      }
+     }
+    }else{
+     ultimoResultadoCicloValido = false;
+    }
+
+    const paleta = obtenerPaletaEsqueleto();
+
+    for(const [a, b] of FULL_BODY_CONNECTIONS){
+     if(lm[a] && lm[b]){
+      ctx.beginPath();
+      ctx.moveTo(lm[a].x * canvas.width, lm[a].y * canvas.height);
+      ctx.lineTo(lm[b].x * canvas.width, lm[b].y * canvas.height);
+      ctx.strokeStyle = paleta.linea;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+     }
+    }
+
+    for(const idx of BODY_JOINTS){
+     if(lm[idx]){
+      ctx.beginPath();
+      ctx.arc(lm[idx].x * canvas.width, lm[idx].y * canvas.height, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = paleta.puntoRelleno;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = paleta.puntoBorde;
+      ctx.stroke();
+     }
+    }
+
+    if(aiState !== "TERAPIA"){
+     document.getElementById("poseStatus").innerText = "En espera (di comenzar)";
+    }else if(enDescanso){
+     document.getElementById("poseStatus").innerText = "En descanso (1 min)";
+    }else if(!evaluacionHabilitada){
+     document.getElementById("poseStatus").innerText = "Explicando ejercicio...";
+    }else{
+     document.getElementById("poseStatus").innerText =
+      estadoVisualEsqueleto === "bien"
+       ? "Verde · Bien"
+       : (estadoVisualEsqueleto === "mal" ? "Rojo · Ajustar" : "Evaluando");
+    }
+
+    const L = {
+     shoulder:lm[11],
+     elbow:lm[13],
+     wrist:lm[15],
+     hip:lm[23],
+     knee:lm[25],
+     ankle:lm[27]
+    };
+
+    const visibleArm =
+     (L.shoulder?.visibility ?? 1) > .25 &&
+     (L.elbow?.visibility ?? 1) > .25 &&
+     (L.wrist?.visibility ?? 1) > .25;
+
+    if(visibleArm){
+     const elbowAngle = calcularAngulo(L.shoulder, L.elbow, L.wrist);
+     const elElbow = document.getElementById("angleElbow");
+     if(elElbow) elElbow.innerText = elbowAngle + "°";
+
+     const shoulderAngle = calcularAngulo(
+      {x:L.shoulder.x, y:L.shoulder.y-0.2},
+      L.shoulder,
+      L.elbow
+     );
+     const elShoulder = document.getElementById("angleShoulder");
+     if(elShoulder) elShoulder.innerText = shoulderAngle + "°";
+     document.getElementById("valAngle").innerText = shoulderAngle + "°";
+
+     if(evaluando){
+      verificarMovimientoBrusco(shoulderAngle, Date.now());
+     }
+    }
+
+    const visibleLeg =
+     (L.hip?.visibility ?? 1) > .25 &&
+     (L.knee?.visibility ?? 1) > .25 &&
+     (L.ankle?.visibility ?? 1) > .25;
+
+    if(visibleLeg && L.shoulder){
+     const hipAngle = calcularAngulo(L.shoulder, L.hip, L.knee);
+     const elHip = document.getElementById("angleHip");
+     if(elHip) elHip.innerText = hipAngle + "°";
+    }
+
+    if(evaluando){
+     detectarRepeticionBrazo(lm);
+    }
+
+    if(socket && socket.connected && pacienteActual && (Date.now()-ultimoEnvioMovimiento)>250){
+     ultimoEnvioMovimiento = Date.now();
+     socket.emit("patient:movement",{
+      cedula:pacienteActual.paciente.documento,
+      angles:{
+       shoulder:document.getElementById("angleShoulder")?.innerText ?? "--",
+       elbow:document.getElementById("angleElbow")?.innerText ?? "--",
+       hip:document.getElementById("angleHip")?.innerText ?? "--"
+      },
+      repetitions:totalRepsRutina,
+      timestamp:Date.now()
+     });
+    }
+
+   }else{
+    document.getElementById("poseStatus").innerText = evaluando ? "Buscando cuerpo..." : "En espera";
+    ultimoResultadoCicloValido = false;
+   }
+  }
  }
 
- ctx.clearRect(0,0,canvas.width,canvas.height);
-
- if(!results.poseLandmarks){
-
-  document.getElementById("poseStatus").innerText = "Buscando cuerpo...";
-  return;
-
- }
-
- const lm = results.poseLandmarks;
-
- if(typeof drawConnectors!=="undefined"){
-
-  drawConnectors(ctx,lm,POSE_CONNECTIONS,{
-   color:"#00d26a",
-   lineWidth:4
-  });
-
-  drawLandmarks(ctx,lm,{
-   color:"#ffffff",
-   lineWidth:2,
-   radius:4
-  });
-
- }
-
- document.getElementById("poseStatus").innerText = "Cuerpo detectado";
-
- const L = {
-  shoulder:lm[11],
-  elbow:lm[13],
-  wrist:lm[15],
-  hip:lm[23],
-  knee:lm[25],
-  ankle:lm[27]
- };
-
- const visible =
-  L.shoulder.visibility>.3 &&
-  L.elbow.visibility>.3 &&
-  L.wrist.visibility>.3;
-
- if(visible){
-
-  const elbowAngle = calcularAngulo(
-   L.shoulder,
-   L.elbow,
-   L.wrist
-  );
-
-  document.getElementById("angleElbow").innerText =
-   elbowAngle+"°";
-
-  const shoulderAngle = calcularAngulo(
-   {x:L.shoulder.x,y:L.shoulder.y-0.2},
-   L.shoulder,
-   L.elbow
-  );
-
-  document.getElementById("angleShoulder").innerText =
-   shoulderAngle+"°";
-
-  document.getElementById("valAngle").innerText =
-   shoulderAngle+"°";
-
- }
-
- if(
-  L.hip.visibility>.3 &&
-  L.knee.visibility>.3 &&
-  L.ankle.visibility>.3
- ){
-
-  const hipAngle = calcularAngulo(
-   L.shoulder,
-   L.hip,
-   L.knee
-  );
-
-  document.getElementById("angleHip").innerText =
-   hipAngle+"°";
-
- }
-
- detectarRepeticionBrazo(lm);
-
- if(socket && socket.connected && pacienteActual && (Date.now()-ultimoEnvioMovimiento)>250){
-
-  ultimoEnvioMovimiento = Date.now();
-
-  socket.emit("patient:movement",{
-
-   cedula:pacienteActual.paciente.documento,
-
-   angles:{
-    shoulder:document.getElementById("angleShoulder").innerText,
-    elbow:document.getElementById("angleElbow").innerText,
-    hip:document.getElementById("angleHip").innerText
-   },
-
-   repetitions:currentRep,
-   timestamp:Date.now()
-
-  });
-
- }
+ detectorAnimFrame = requestAnimationFrame(bucleDetector);
 }
 
 function detectarRepeticionBrazo(lm){
-
- if(aiState!=="TERAPIA")return;
+ const poseFeedbackEl = document.getElementById("poseFeedback");
+ if(!puedeEvaluarAhora()) return;
 
  const shoulder = lm[11];
- const elbow = lm[13];
  const wrist = lm[15];
 
- if(
-  shoulder.visibility<.3 ||
-  elbow.visibility<.3 ||
-  wrist.visibility<.3
- ){
-
-  document.getElementById("poseFeedback").innerText =
-   "Asegúrate de que tu brazo esté visible en la cámara.";
-
+ if((shoulder?.visibility ?? 1) < .25 || (wrist?.visibility ?? 1) < .25){
+  if(poseFeedbackEl){
+   poseFeedbackEl.innerText = "Asegúrate de que tu brazo esté visible en la cámara.";
+  }
   return;
  }
 
- const levantado = wrist.y < shoulder.y-.08;
-
+ const levantado = wrist.y < shoulder.y - .06;
  if(levantado && !brazoArriba){
-
   brazoArriba = true;
   ultimaRepeticion = Date.now();
-
  }
-
  if(!levantado && brazoArriba){
-
   brazoArriba = false;
-
-  if(Date.now()-ultimaRepeticion>350){
-   registrarRepeticion();
-  }
-
  }
 
- document.getElementById("poseFeedback").innerText =
-  levantado
+ if(poseFeedbackEl){
+  poseFeedbackEl.innerText = levantado
    ? "Movimiento detectado: brazo elevado."
    : "Mantén una posición cómoda y sigue las instrucciones.";
-
+ }
 }
 
 /* =========================================================
-   CONTADOR ILIMITADO DE REPETICIONES
+   CONTROL DE TERAPIA Y RUTINA DE 4 EJERCICIOS x 5 REPS
 ========================================================= */
 
-function registrarRepeticion(){
+function actualizarIndicadoresEjercicio(){
+ const ej = EJERCICIOS_RUTINA[indiceEjercicioActual] || EJERCICIOS_RUTINA[0];
+ const lbl = document.getElementById("ejercicioActualLabel");
+ if(lbl){
+  lbl.innerText = `Ejercicio ${indiceEjercicioActual + 1}/${EJERCICIOS_RUTINA.length}: ${ej.corto} · Rep ${repEjercicioActual}/${REPS_POR_EJERCICIO}`;
+ }
 
- if(aiState!=="TERAPIA")return;
+ const repEl = document.getElementById("repCounter");
+ if(repEl){
+  repEl.innerText = `${repEjercicioActual} / ${REPS_POR_EJERCICIO}`;
+ }
 
- currentRep++;
+ EJERCICIOS_RUTINA.forEach((item, idx) => {
+  const btn = document.getElementById(item.btnId);
+  if(btn) btn.classList.toggle("active", idx === indiceEjercicioActual);
+ });
+}
 
- document.getElementById("repCounter").innerText =
-  currentRep;
+function seleccionarEjercicioManual(idx){
+ if(idx < 0 || idx >= EJERCICIOS_RUTINA.length) return;
+ detenerTemporizadorDescanso();
+ indiceEjercicioActual = idx;
+ repEjercicioActual = 0;
+ tiempoEnEjercicio = 0;
+ avanceSecuencialActivo = false;
+ evaluacionHabilitada = false;
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
+ actualizarIndicadoresEjercicio();
 
- document.getElementById("feedbackMessage").innerText =
-  `Movimiento detectado: ${currentRep} repeticiones.`;
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
 
- actualizarDialogo(
-  `Repetición ${currentRep}. Continúa a tu ritmo.`
- );
+ const ej = EJERCICIOS_RUTINA[indiceEjercicioActual];
+ if(aiState === "TERAPIA"){
+  explicarEjercicioYActivarEvaluacion(ej, null);
+ }else{
+  const msg = `Ejercicio listo: ${ej.nombre}. Di "Comenzar" cuando estés listo.`;
+  document.getElementById("feedbackMessage").innerText = msg;
+  actualizarDialogo(msg);
+ }
+}
+
+function registrarRepeticionEjercicio(){
+ if(!puedeEvaluarAhora()) return;
+
+ const ej = EJERCICIOS_RUTINA[indiceEjercicioActual];
+ repEjercicioActual++;
+ totalRepsRutina++;
+ currentRep = totalRepsRutina;
+
+ const refuerzo = MENSAJES_REFUERZO_POSITIVO[(totalRepsRutina - 1) % MENSAJES_REFUERZO_POSITIVO.length];
+ mostrarBannerAcompanamiento(refuerzo, "positivo");
+
+ establecerEstadoVisualEsqueleto("bien", 950);
+ actualizarIndicadoresEjercicio();
 
  const registro = {
-
-  repeticion:currentRep,
-  timestamp:Date.now(),
-
-  anguloHombro:
-   document.getElementById("angleShoulder").innerText,
-
-  anguloCodo:
-   document.getElementById("angleElbow").innerText
-
+  ejercicio: ej.nombre,
+  repeticionEjercicio: repEjercicioActual,
+  repeticionTotal: totalRepsRutina,
+  timestamp: Date.now(),
+  anguloHombro: document.getElementById("angleShoulder")?.innerText ?? "--",
+  anguloCodo: document.getElementById("angleElbow")?.innerText ?? "--"
  };
-
  sessionResults.push(registro);
 
  if(socket && socket.connected && pacienteActual){
-
   socket.emit("patient:repetition",{
-
    cedula:pacienteActual.paciente.documento,
    result:registro
-
   });
-
  }
 
+ const palabraConteo = PALABRAS_CONTEO[repEjercicioActual - 1] || String(repEjercicioActual);
+ const feedbackTexto = `${palabraConteo.toUpperCase()} (${repEjercicioActual}/${REPS_POR_EJERCICIO}) · Bien`;
+ document.getElementById("feedbackMessage").innerText = feedbackTexto;
+ actualizarDialogo(`${palabraConteo.charAt(0).toUpperCase() + palabraConteo.slice(1)}. Está bien. ${refuerzo}`);
+
+ if(repEjercicioActual >= REPS_POR_EJERCICIO){
+  if(avanceSecuencialActivo && indiceEjercicioActual < EJERCICIOS_RUTINA.length - 1){
+   indiceEjercicioActual++;
+   repEjercicioActual = 0;
+   tiempoEnEjercicio = 0;
+   evaluacionHabilitada = false;
+   resetearMetricasCicloDetector();
+   const siguiente = EJERCICIOS_RUTINA[indiceEjercicioActual];
+   actualizarIndicadoresEjercicio();
+   narrarConteoRepeticion(REPS_POR_EJERCICIO, siguiente, refuerzo);
+  }else{
+   narrarConteoRepeticion(REPS_POR_EJERCICIO, null, refuerzo);
+   speechQueueTimer = setTimeout(()=>{
+    if(aiState === "TERAPIA") finalizarTerapia();
+   }, 950);
+  }
+ }else{
+  narrarConteoRepeticion(repEjercicioActual, null, refuerzo);
+ }
 }
 
-/* =========================================================
-   CONTROL DE TERAPIA
-========================================================= */
-
 function iniciarTerapia(){
-
- if(aiState==="TERAPIA" || aiState==="PREPARANDO")return;
+ if(aiState==="TERAPIA")return;
 
  if(aiState==="PAUSADA"){
   continuarTerapia();
   return;
  }
 
- if(aiState!=="ESPERANDO")return;
-
  if(!diaActivoSeleccionado){
   actualizarDialogo("No tienes una terapia habilitada. Tu médico debe habilitarla.");
   return;
  }
 
+ detenerTemporizadorDescanso();
  currentRep = 0;
+ totalRepsRutina = 0;
+ indiceEjercicioActual = 0;
+ repEjercicioActual = 0;
+ tiempoEnEjercicio = 0;
+ avanceSecuencialActivo = true;
+ evaluacionHabilitada = false;
  sessionResults = [];
  sesionGuardada = false;
  brazoArriba = false;
+ ultimoRepDetectadoMs = 0;
+ anguloSuavizadoHombro = null;
+ ultimoAnguloHombro = null;
+ ultimoTiempoAnguloMs = 0;
 
- document.getElementById("repCounter").innerText = currentRep;
+ aiState = "TERAPIA";
+ establecerEstadoVisualEsqueleto("original", 0);
+ resetearMetricasCicloDetector();
 
- document.getElementById("feedbackMessage").innerText =
-  "Preparando el inicio de la terapia...";
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
 
- const dia = diaActivoSeleccionado
-  ? diaActivoSeleccionado.numDia
-  : 1;
+ actualizarIndicadoresEjercicio();
 
- aiState = "PREPARANDO";
-
- actualizarDialogo("Sigue las siguientes indicaciones");
-
- hablarIA("Sigue las siguientes indicaciones",()=>{
-
-  if(aiState!=="PREPARANDO")return;
-
-  aiState = "TERAPIA";
-  brazoArriba = false;
-
-  document.getElementById("feedbackMessage").innerText =
-   "Seguimiento corporal activo. Realiza el movimiento indicado.";
-
-  actualizarDialogo(
-   `Comenzamos la terapia del día ${dia}.`
-  );
-
-  if(fbxMixer && animationActions.length){
-
-   animationActions.forEach(action=>{
-    action.reset();
-    action.paused = false;
-    action.play();
-   });
-
-  }
-
-  iniciarConteoVoz();
-
- });
-
+ const dia = diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1;
+ const primerEj = EJERCICIOS_RUTINA[0];
+ explicarEjercicioYActivarEvaluacion(primerEj, dia);
 }
 
 function finalizarTerapia(){
-
  if(aiState!=="TERAPIA" && aiState!=="PAUSADA"){
   return;
  }
 
  aiState = "REPOSO";
-
+ evaluacionHabilitada = false;
+ detenerTemporizadorDescanso();
+ establecerEstadoVisualEsqueleto("original", 0);
  detenerColaVoz();
+
+ const banner = document.getElementById("supportBanner");
+ if(banner) banner.classList.remove("show", "positive");
 
  if("speechSynthesis" in window){
   window.speechSynthesis.cancel();
  }
 
- if(fbxMixer){
-  fbxMixer.stopAllAction();
- }
-
- const diaActual = diaActivoSeleccionado
-  ? diaActivoSeleccionado.numDia
-  : 1;
+ const diaActual = diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1;
 
  const fin =
-  `Has finalizado la terapia del día ${diaActual}. `+
-  `Realizaste ${currentRep} repeticiones.`;
+  `¡Muy bien hecho! ... Has finalizado la terapia del día ${diaActual} con ${totalRepsRutina} repeticiones.`;
 
  document.getElementById("feedbackMessage").innerText =
-  `Sesión finalizada. Total: ${currentRep} repeticiones.`;
+  `Sesión finalizada. Total: ${totalRepsRutina} repeticiones.`;
 
  actualizarDialogo(fin);
 
  if(!sesionGuardada){
-
   guardarResultadosSesion(diaActual);
   sesionGuardada = true;
-
  }
 
- hablarIA(fin);
-
+ hablarIA(fin, null, 0.94);
 }
 
 /* =========================================================
@@ -1551,123 +2143,134 @@ function finalizarTerapia(){
 ========================================================= */
 
 function guardarResultadosSesion(dia){
-
  if(!pacienteActual)return;
 
  const resultado = {
-
   cedula:pacienteActual.paciente.documento,
-
-  nombre:
-   `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
-
+  nombre:`${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`,
   dia:dia,
-
-  repeticiones:currentRep,
-
+  repeticiones:totalRepsRutina,
   resultados:sessionResults,
-
   fecha:new Date().toISOString()
-
  };
 
  const key = `uac_sesiones_${resultado.cedula}`;
-
  let historial = [];
 
  try{
-
-  historial = JSON.parse(
-   localStorage.getItem(key) || "[]"
-  );
-
+  historial = JSON.parse(localStorage.getItem(key) || "[]");
  }catch(e){
-
   historial = [];
-
  }
 
  historial.push(resultado);
-
  localStorage.setItem(key,JSON.stringify(historial));
  refrescarTerapias();
 
  if(socket && socket.connected){
-
   socket.emit("patient:session-completed",resultado);
-
  }
-
 }
 
 /* =========================================================
-   AVATAR 3D
+   AVATAR 3D — ANIMACIÓN PROCEDURAL PASO A PASO (MIXAMO)
 ========================================================= */
 
-function init3DAvatar(){
+let indicadorFaseAvatarEl = null;
 
+function crearIndicadorFaseAvatar(){
+ const cont = document.querySelector(".avatar-container");
+ if(!cont || document.getElementById("avatarStepBadge")) return;
+
+ const badge = document.createElement("div");
+ badge.id = "avatarStepBadge";
+ badge.style.cssText = `
+  display:none;
+  position:absolute;
+  top:15px;
+  right:15px;
+  z-index:12;
+  background:rgba(15,23,42,.92);
+  border:1px solid rgba(0,210,106,.55);
+  color:#e2e8f0;
+  padding:8px 12px;
+  border-radius:8px;
+  font-size:.74rem;
+  font-weight:bold;
+  max-width:230px;
+  text-align:right;
+  box-shadow:0 4px 14px rgba(0,0,0,.4);
+ `;
+ badge.innerHTML = `<div style="color:#00d26a;font-size:.64rem;text-transform:uppercase;">Guía del Avatar</div><div id="avatarStepText">Postura inicial erguida</div>`;
+ cont.appendChild(badge);
+ indicadorFaseAvatarEl = document.getElementById("avatarStepText");
+}
+
+function actualizarTextoPasoAvatar(texto){
+ if(!indicadorFaseAvatarEl){
+  indicadorFaseAvatarEl = document.getElementById("avatarStepText");
+ }
+ if(indicadorFaseAvatarEl && indicadorFaseAvatarEl.innerText !== texto){
+  indicadorFaseAvatarEl.innerText = texto;
+ }
+}
+
+function init3DAvatar(){
  const canvas = document.getElementById("avatarCanvas");
  const container = document.querySelector(".avatar-container");
 
- if(!canvas || !container || typeof THREE==="undefined"){
-
+ if(!canvas || !container || typeof THREE === "undefined"){
   console.error("No se pudo preparar el entorno Three.js.");
   ocultarCarga();
   return;
-
  }
+
+ crearIndicadorFaseAvatar();
 
  scene = new THREE.Scene();
  scene.background = new THREE.Color(0x141422);
 
  camera = new THREE.PerspectiveCamera(
-  40,
-  container.clientWidth/Math.max(container.clientHeight,1),
-  .1,
+  38,
+  container.clientWidth / Math.max(container.clientHeight, 1),
+  0.1,
   5000
  );
-
- camera.position.set(0,100,380);
+ camera.position.set(0, 95, 310);
 
  renderer = new THREE.WebGLRenderer({
-
-  canvas:canvas,
-  antialias:true,
-  alpha:true
-
+  canvas: canvas,
+  antialias: true,
+  alpha: true
  });
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+ renderer.setSize(container.clientWidth, container.clientHeight);
 
- renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+ scene.add(new THREE.AmbientLight(0xffffff, 1.4));
 
- renderer.setSize(
-  container.clientWidth,
-  container.clientHeight
- );
+ const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+ keyLight.position.set(140, 260, 260);
+ scene.add(keyLight);
 
- scene.add(new THREE.AmbientLight(0xffffff,1.8));
+ const fillLight = new THREE.DirectionalLight(0x88ccff, 0.7);
+ fillLight.position.set(-180, 140, 160);
+ scene.add(fillLight);
 
- const light = new THREE.DirectionalLight(0xffffff,2);
+ const grid = new THREE.GridHelper(180, 12, 0x00d26a, 0x262640);
+ grid.position.y = 0;
+ grid.visible = false;
+ scene.add(grid);
 
- light.position.set(200,300,300);
-
- scene.add(light);
-
- controls = new THREE.OrbitControls(
-  camera,
-  renderer.domElement
- );
-
- controls.target.set(0,80,0);
+ controls = new THREE.OrbitControls(camera, renderer.domElement);
+ controls.target.set(0, 82, 0);
  controls.enableDamping = true;
+ controls.update();
 
  const fbxLoader = new THREE.FBXLoader();
 
  fbxLoader.load(
-
   "./terapia.1.fbx",
-
   (fbx)=>{
-
    fbxModel = fbx;
 
    const box = new THREE.Box3().setFromObject(fbxModel);
@@ -1678,127 +2281,385 @@ function init3DAvatar(){
    fbxModel.position.y -= box.min.y;
    fbxModel.position.z -= center.z;
 
-   const maxDim = Math.max(size.x,size.y,size.z);
-
-   if(maxDim>0){
-
-    const scale = 150/maxDim;
+   const maxDim = Math.max(size.x, size.y, size.z);
+   if(maxDim > 0){
+    const scale = 155 / maxDim;
     fbxModel.scale.setScalar(scale);
-
    }
+
+   fbxModel.rotation.set(0, 0, 0);
 
    scene.add(fbxModel);
+   fbxModel.updateMatrixWorld(true);
 
-   if(fbx.animations && fbx.animations.length>0){
-
+   if(fbx.animations && fbx.animations.length > 0){
     fbxMixer = new THREE.AnimationMixer(fbxModel);
-
     fbx.animations.forEach(clip=>{
-
      const action = fbxMixer.clipAction(clip);
      animationActions.push(action);
-
     });
-
+    fbxMixer.stopAllAction();
    }
+
+   avatarRig = mapearRigAvatar(fbxModel);
+   posturaNeutralErguida(1, 0);
 
    document.getElementById("avatarLoadMessage").innerText =
     "Avatar cargado correctamente.";
 
    ocultarCarga();
-
   },
-
   (progress)=>{
-
    if(progress.total){
-
-    const percent = Math.round(
-     progress.loaded/progress.total*100
-    );
-
+    const percent = Math.round(progress.loaded / progress.total * 100);
     document.getElementById("avatarLoadMessage").innerText =
      `Cargando avatar: ${percent}%`;
-
    }
-
   },
-
   (error)=>{
-
    console.error("Error al cargar terapia.1.fbx:",error);
-
    document.getElementById("avatarLoadMessage").innerText =
     "No se pudo cargar terapia.1.fbx. Revisa que esté en la misma carpeta.";
-
    ocultarCarga();
-
   }
-
  );
 
- window.addEventListener("resize",ajustarVisor3D);
+ window.addEventListener("resize", ajustarVisor3D);
+}
 
+function buscarHueso(root, candidatos){
+ if(!root) return null;
+ let encontrado = null;
+ const normas = candidatos.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, ""));
+
+ root.traverse(obj => {
+  if(encontrado || !obj.isBone) return;
+  const nombreNorm = (obj.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if(normas.some(n => nombreNorm.endsWith(n) || nombreNorm.includes(n))){
+   encontrado = obj;
+  }
+ });
+ return encontrado;
+}
+
+function mapearRigAvatar(model){
+ if(!model) return null;
+
+ const rig = {
+  hips: buscarHueso(model, ["mixamorigHips", "hips", "pelvis"]),
+  spine: buscarHueso(model, ["mixamorigSpine", "spine"]),
+  spine1: buscarHueso(model, ["mixamorigSpine1", "spine1"]),
+  spine2: buscarHueso(model, ["mixamorigSpine2", "spine2", "chest"]),
+  neck: buscarHueso(model, ["mixamorigNeck", "neck"]),
+  head: buscarHueso(model, ["mixamorigHead", "head"]),
+  leftShoulder: buscarHueso(model, ["mixamorigLeftShoulder", "leftshoulder"]),
+  rightShoulder: buscarHueso(model, ["mixamorigRightShoulder", "rightshoulder"]),
+  leftArm: buscarHueso(model, ["mixamorigLeftArm", "leftarm"]),
+  rightArm: buscarHueso(model, ["mixamorigRightArm", "rightarm"]),
+  leftForeArm: buscarHueso(model, ["mixamorigLeftForeArm", "leftforearm"]),
+  rightForeArm: buscarHueso(model, ["mixamorigRightForeArm", "rightforearm"]),
+  leftUpLeg: buscarHueso(model, ["mixamorigLeftUpLeg", "leftupleg"]),
+  rightUpLeg: buscarHueso(model, ["mixamorigRightUpLeg", "rightupleg"]),
+  leftLeg: buscarHueso(model, ["mixamorigLeftLeg", "leftleg"]),
+  rightLeg: buscarHueso(model, ["mixamorigRightLeg", "rightleg"]),
+  leftFoot: buscarHueso(model, ["mixamorigLeftFoot", "leftfoot"]),
+  rightFoot: buscarHueso(model, ["mixamorigRightFoot", "rightfoot"]),
+  restQuat: new Map(),
+  restPos: new Map(),
+  hipsBaseY: 0
+ };
+
+ model.traverse(obj => {
+  if(obj.isBone){
+   rig.restQuat.set(obj.uuid, obj.quaternion.clone());
+   rig.restPos.set(obj.uuid, obj.position.clone());
+  }
+ });
+
+ if(rig.hips){
+  rig.hipsBaseY = rig.hips.position.y;
+ }
+
+ return rig;
+}
+
+function rotarHuesoGrados(bone, degX, degY, degZ, suavidad = 0.18){
+ if(!bone || !avatarRig) return;
+ const baseQ = avatarRig.restQuat.get(bone.uuid);
+ if(!baseQ) return;
+
+ const eulerDelta = new THREE.Euler(
+  THREE.MathUtils.degToRad(degX),
+  THREE.MathUtils.degToRad(degY),
+  THREE.MathUtils.degToRad(degZ),
+  "XYZ"
+ );
+ const deltaQ = new THREE.Quaternion().setFromEuler(eulerDelta);
+ const targetQ = baseQ.clone().multiply(deltaQ);
+
+ if(suavidad >= 1){
+  bone.quaternion.copy(targetQ);
+ }else{
+  bone.quaternion.slerp(targetQ, suavidad);
+ }
+}
+
+function curvaPasoAPaso(fase){
+ const t = THREE.MathUtils.clamp(fase, 0, 1);
+ if(t < 0.35){
+  const p = t / 0.35;
+  return 0.5 - 0.5 * Math.cos(Math.PI * p);
+ }
+ if(t < 0.60){
+  return 1.0;
+ }
+ if(t < 0.92){
+  const p = (t - 0.60) / 0.32;
+  return 0.5 + 0.5 * Math.cos(Math.PI * p);
+ }
+ return 0.0;
+}
+
+function posturaNeutralErguida(suavidad = 0.18, anguloYModelo = 0){
+ if(!avatarRig || !fbxModel) return;
+
+ fbxModel.rotation.y = THREE.MathUtils.lerp(fbxModel.rotation.y, THREE.MathUtils.degToRad(anguloYModelo), suavidad);
+
+ if(avatarRig.hips){
+  const basePos = avatarRig.restPos.get(avatarRig.hips.uuid);
+  if(basePos){
+   avatarRig.hips.position.x = THREE.MathUtils.lerp(avatarRig.hips.position.x, basePos.x, suavidad);
+   avatarRig.hips.position.y = THREE.MathUtils.lerp(avatarRig.hips.position.y, basePos.y, suavidad);
+   avatarRig.hips.position.z = THREE.MathUtils.lerp(avatarRig.hips.position.z, basePos.z, suavidad);
+  }
+  rotarHuesoGrados(avatarRig.hips, 0, 0, 0, suavidad);
+ }
+
+ rotarHuesoGrados(avatarRig.spine, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.spine1, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.spine2, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.neck, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.head, 0, 0, 0, suavidad);
+
+ rotarHuesoGrados(avatarRig.leftShoulder, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.rightShoulder, 0, 0, 0, suavidad);
+
+ rotarHuesoGrados(avatarRig.leftArm, 4, 0, 74, suavidad);
+ rotarHuesoGrados(avatarRig.rightArm, 4, 0, -74, suavidad);
+ rotarHuesoGrados(avatarRig.leftForeArm, 0, 0, 8, suavidad);
+ rotarHuesoGrados(avatarRig.rightForeArm, 0, 0, -8, suavidad);
+
+ rotarHuesoGrados(avatarRig.leftUpLeg, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.rightUpLeg, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.leftLeg, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.rightLeg, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.leftFoot, 0, 0, 0, suavidad);
+ rotarHuesoGrados(avatarRig.rightFoot, 0, 0, 0, suavidad);
+}
+
+function animarBrazosFrenteAbajo(fase){
+ posturaNeutralErguida(0.22, 18);
+ const k = curvaPasoAPaso(fase);
+
+ if(fase < 0.35) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 1: Sube brazos al frente`);
+ else if(fase < 0.60) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 2: Mantén al frente (90°)`);
+ else if(fase < 0.92) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 3: Baja despacio`);
+ else actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Postura inicial`);
+
+ rotarHuesoGrados(avatarRig.leftArm, 4 + 84 * k, -10 * k, 74 * (1 - k) + 10 * k, 0.24);
+ rotarHuesoGrados(avatarRig.rightArm, 4 + 84 * k, 10 * k, -74 * (1 - k) - 10 * k, 0.24);
+ rotarHuesoGrados(avatarRig.leftForeArm, 6 * k, 0, 8 * (1 - k), 0.24);
+ rotarHuesoGrados(avatarRig.rightForeArm, 6 * k, 0, -8 * (1 - k), 0.24);
+}
+
+function animarBrazosArribaAbajo(fase){
+ posturaNeutralErguida(0.24, 0);
+ const k = curvaPasoAPaso(fase);
+
+ if(fase < 0.35) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 1: Eleva brazos arriba`);
+ else if(fase < 0.60) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 2: Sostén brazos arriba`);
+ else if(fase < 0.92) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 3: Baja hacia abajo`);
+ else actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Brazos abajo`);
+
+ rotarHuesoGrados(avatarRig.leftShoulder, 0, 0, -10 * k, 0.25);
+ rotarHuesoGrados(avatarRig.rightShoulder, 0, 0, 10 * k, 0.25);
+ rotarHuesoGrados(avatarRig.leftArm, 4 - 84 * k, -12 * k, 74 - 64 * k, 0.25);
+ rotarHuesoGrados(avatarRig.rightArm, 4 - 84 * k, 12 * k, -74 + 64 * k, 0.25);
+ rotarHuesoGrados(avatarRig.leftForeArm, 0, 0, 8 * (1 - k), 0.25);
+ rotarHuesoGrados(avatarRig.rightForeArm, 0, 0, -8 * (1 - k), 0.25);
+}
+
+function animarSentadillas(fase){
+ posturaNeutralErguida(0.24, 15);
+ const k = curvaPasoAPaso(fase);
+
+ if(fase < 0.35) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 1: Baja cadera y saca rodillas al frente`);
+ else if(fase < 0.60) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 2: Sentadilla al frente`);
+ else if(fase < 0.92) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Paso 3: Sube despacio`);
+ else actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · De pie al frente`);
+
+ if(avatarRig.hips){
+  const basePos = avatarRig.restPos.get(avatarRig.hips.uuid);
+  const bajaCadera = Math.max(Math.abs(avatarRig.hipsBaseY) * 0.22, 18) * k;
+  avatarRig.hips.position.y = THREE.MathUtils.lerp(avatarRig.hips.position.y, basePos.y - bajaCadera, 0.25);
+  avatarRig.hips.position.z = THREE.MathUtils.lerp(avatarRig.hips.position.z, basePos.z, 0.25);
+ }
+
+ rotarHuesoGrados(avatarRig.leftUpLeg, 55 * k, 0, 10 * k, 0.25);
+ rotarHuesoGrados(avatarRig.rightUpLeg, 55 * k, 0, -10 * k, 0.25);
+ rotarHuesoGrados(avatarRig.leftLeg, -68 * k, 0, -5 * k, 0.25);
+ rotarHuesoGrados(avatarRig.rightLeg, -68 * k, 0, 5 * k, 0.25);
+ rotarHuesoGrados(avatarRig.leftFoot, 13 * k, 0, 0, 0.25);
+ rotarHuesoGrados(avatarRig.rightFoot, 13 * k, 0, 0, 0.25);
+
+ rotarHuesoGrados(avatarRig.spine, 12 * k, 0, 0, 0.25);
+ rotarHuesoGrados(avatarRig.spine1, 6 * k, 0, 0, 0.25);
+ rotarHuesoGrados(avatarRig.leftArm, 4 + 48 * k, 0, 74 * (1 - k) + 16 * k, 0.25);
+ rotarHuesoGrados(avatarRig.rightArm, 4 + 48 * k, 0, -74 * (1 - k) - 16 * k, 0.25);
+}
+
+function animarMarcarPaso(fase){
+ posturaNeutralErguida(0.24, 15);
+
+ const esPasoIzquierdo = fase < 0.5;
+ const subFase = (fase % 0.5) * 2;
+ const k = curvaPasoAPaso(subFase);
+ const piernaTxt = esPasoIzquierdo ? "rodilla izquierda" : "rodilla derecha";
+
+ if(subFase < 0.35) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Dobla ${piernaTxt} hacia adelante`);
+ else if(subFase < 0.60) actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Mantén ${piernaTxt} al frente`);
+ else actualizarTextoPasoAvatar(`Rep ${Math.min(repEjercicioActual + 1, 5)}/5 · Baja el pie con control`);
+
+ const musloActivo = esPasoIzquierdo ? avatarRig.leftUpLeg : avatarRig.rightUpLeg;
+ const rodillaActiva = esPasoIzquierdo ? avatarRig.leftLeg : avatarRig.rightLeg;
+ const pieActivo = esPasoIzquierdo ? avatarRig.leftFoot : avatarRig.rightFoot;
+
+ const musloApoyo = esPasoIzquierdo ? avatarRig.rightUpLeg : avatarRig.leftUpLeg;
+ const rodillaApoyo = esPasoIzquierdo ? avatarRig.rightLeg : avatarRig.leftLeg;
+ const pieApoyo = esPasoIzquierdo ? avatarRig.rightFoot : avatarRig.leftFoot;
+
+ rotarHuesoGrados(musloActivo, 68 * k, 0, 0, 0.26);
+ rotarHuesoGrados(rodillaActiva, -82 * k, 0, 0, 0.26);
+ rotarHuesoGrados(pieActivo, 14 * k, 0, 0, 0.26);
+
+ rotarHuesoGrados(musloApoyo, 0, 0, 0, 0.26);
+ rotarHuesoGrados(rodillaApoyo, 0, 0, 0, 0.26);
+ rotarHuesoGrados(pieApoyo, 0, 0, 0, 0.26);
+
+ const dir = esPasoIzquierdo ? 1 : -1;
+ rotarHuesoGrados(avatarRig.leftArm, 4 - 20 * dir * k, 0, 74, 0.26);
+ rotarHuesoGrados(avatarRig.rightArm, 4 + 20 * dir * k, 0, -74, 0.26);
+ rotarHuesoGrados(avatarRig.leftForeArm, 16 * k, 0, 8, 0.26);
+ rotarHuesoGrados(avatarRig.rightForeArm, 16 * k, 0, -8, 0.26);
+}
+
+function ejecutarMovimientoEjercicio(id, fase){
+ switch(id){
+  case "brazos_frente_abajo":
+   animarBrazosFrenteAbajo(fase);
+   break;
+  case "brazos_arriba_abajo":
+   animarBrazosArribaAbajo(fase);
+   break;
+  case "sentadillas":
+   animarSentadillas(fase);
+   break;
+  case "marcar_paso":
+   animarMarcarPaso(fase);
+   break;
+  default:
+   posturaNeutralErguida(0.18, 0);
+   break;
+ }
+}
+
+function actualizarMovimientoAvatarPorCodigo(delta){
+ if(!fbxModel) return;
+ if(!avatarRig){
+  avatarRig = mapearRigAvatar(fbxModel);
+ }
+ if(!avatarRig) return;
+
+ const esEspejo = Boolean(PARAM_ESPEJO);
+ const enTerapia = esEspejo
+  ? (espejoEstado === "TERAPIA")
+  : (aiState === "TERAPIA");
+ const estaPausada = esEspejo
+  ? (espejoEstado === "PAUSADA")
+  : (aiState === "PAUSADA");
+ const descansoActivo = esEspejo ? espejoEnDescanso : enDescanso;
+ const idxActual = esEspejo ? espejoEjercicioIdx : indiceEjercicioActual;
+
+ const ej = EJERCICIOS_RUTINA[idxActual] || EJERCICIOS_RUTINA[0];
+
+ if(enTerapia && !descansoActivo){
+  const dur = (ej.duracionCiclo || 3.4) * 1.15;
+  tiempoEnEjercicio += delta;
+  const ciclosCompletados = Math.floor(tiempoEnEjercicio / dur);
+
+  if(!esEspejo && evaluacionHabilitada && ciclosCompletados > repEjercicioActual && repEjercicioActual < REPS_POR_EJERCICIO){
+   const detectorListo = Boolean(poseLandmarker);
+   if(!detectorListo || ultimoResultadoCicloValido){
+    registrarRepeticionEjercicio();
+    resetearMetricasCicloDetector();
+   }else{
+    tiempoEnEjercicio = repEjercicioActual * dur;
+    resetearMetricasCicloDetector();
+    marcarMalYAnimar(ej.mensajeAnimo, false);
+   }
+  }
+
+  const faseActual = (tiempoEnEjercicio % dur) / dur;
+  ejecutarMovimientoEjercicio(ej.id, faseActual);
+ }else if(descansoActivo){
+  posturaNeutralErguida(0.15, 0);
+  actualizarTextoPasoAvatar(`Descansando (${formatearTiempoReloj(segundosDescansoRestantes)})`);
+ }else if(!estaPausada){
+  posturaNeutralErguida(0.15, 0);
+  actualizarTextoPasoAvatar(`Listo: ${ej.corto} (5 repeticiones)`);
+ }else{
+  actualizarTextoPasoAvatar("Terapia en pausa");
+ }
 }
 
 function ajustarVisor3D(){
-
  const container = document.querySelector(".avatar-container");
-
- if(!renderer || !camera || !container)return;
+ if(!renderer || !camera || !container) return;
 
  const width = container.clientWidth;
- const height = Math.max(container.clientHeight,1);
+ const height = Math.max(container.clientHeight, 1);
 
- camera.aspect = width/height;
+ camera.aspect = width / height;
  camera.updateProjectionMatrix();
-
- renderer.setSize(width,height);
-
+ renderer.setSize(width, height);
 }
 
 function ocultarCarga(){
-
  const overlay = document.getElementById("loadingOverlay");
-
  if(overlay){
-
   overlay.style.opacity = "0";
-
   setTimeout(()=>{
    overlay.style.display = "none";
-  },500);
-
+  }, 500);
  }
-
 }
 
 function animate(){
-
  requestAnimationFrame(animate);
+ const delta = Math.min(clock.getDelta(), 0.05);
 
- const delta = clock.getDelta();
-
- if(fbxMixer){
-  fbxMixer.update(delta);
- }
+ actualizarMovimientoAvatarPorCodigo(delta);
 
  if(controls){
   controls.update();
  }
-
  if(renderer && scene && camera){
-  renderer.render(scene,camera);
+  renderer.render(scene, camera);
  }
-
 }
 
 /* =========================================================
    MQTT: SIGNOS VITALES DESDE EL ESP32
-   ESP32 -> broker.emqx.io -> esta página. Los valores se escriben en
-   los mismos elementos del panel (respiratoryRate, oxygenLevel,
-   bodyTemperature), así enviarEstadoPaciente() ya se los manda al
-   médico por Socket.IO sin tocar nada más.
 ========================================================= */
 
 const MQTT_URL = "wss://broker.emqx.io:8084/mqtt";
@@ -1807,14 +2668,10 @@ const MQTT_TOPIC = "miproyecto-8472/sensores/datos";
 let mqttClient = null;
 let mqttCampos = "";
 let timerEdadVitales = null;
-let vitalesPendientes = []; // lecturas que no se pudieron enviar por falta de conexión
+let vitalesPendientes = [];
 
-/* Último valor conocido de cada signo vital. El ESP32 envía cada cierto
-   tiempo (p. ej. 1 minuto): el valor se QUEDA en pantalla hasta que
-   llegue uno nuevo, y entonces se actualiza. */
 const ultimoVital = {pulso:null,respiracion:null,saturacion:null,temperatura:null,t:0};
 
-// Nombres de campo aceptados (se comparan sin mayúsculas, tildes ni guiones)
 const CAMPOS_VITALES = {
  pulso:["frecuencia_cardiaca","frecuenciaCardiaca","frecuencia_cardíaca","frecuencia cardiaca","pulso","fc","bpm","hr","heart_rate","heartRate","heartrate","ritmo_cardiaco","latidos"],
  respiracion:["frecuencia_respiratoria","frecuenciaRespiratoria","frecuencia respiratoria","respiracion","respiración","resp","fr","rr","respiratory_rate","respiratoryRate","resp_rate","rpm"],
@@ -1826,7 +2683,6 @@ function normClave(k){
  return String(k).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
 }
 
-// Aplana el JSON (también lee objetos anidados, p. ej. {"vitales":{"spo2":97}})
 function aplanarJson(obj,out,prof){
  out = out || {};
  prof = prof || 0;
@@ -1910,22 +2766,19 @@ function construirPayloadVitales(origen,valores){
   saturacion:valores.saturacion,
   temperatura:valores.temperatura,
   angulos:{
-   hombro:numeroDeElemento("angleShoulder"),
+   hombro:numeroDeElemento("angleShoulder") ?? numeroDeElemento("valAngle"),
    codo:numeroDeElemento("angleElbow"),
    cadera:numeroDeElemento("angleHip")
   },
   estado:aiState,
   dia:diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1,
-  repeticiones:currentRep,
+  repeticiones:totalRepsRutina,
   origen:origen
  };
 }
 
-/* Envía la lectura al servidor, que la guarda en el historial del paciente
-   y se la muestra al médico. Si no hay conexión, queda en cola. */
 function enviarVitalesAlServidor(origen,valores){
  if(!pacienteActual) return;
-
  const payload = construirPayloadVitales(origen,valores);
 
  if(socket && socket.connected){
@@ -1944,13 +2797,12 @@ function vaciarVitalesPendientes(){
 }
 
 function iniciarMQTT(){
-
  if(typeof mqtt === "undefined"){
   estadoMqtt("librería MQTT no cargada");
   return;
  }
 
- if(mqttClient) return; // evita conexiones duplicadas
+ if(mqttClient) return;
 
  mqttClient = mqtt.connect(MQTT_URL,{
   clientId:"paciente-web-" + Math.random().toString(16).slice(2,10),
@@ -1965,7 +2817,6 @@ function iniciarMQTT(){
 
  mqttClient.on("reconnect",()=>estadoMqtt("reconectando..."));
 
- // Al perder conexión NO se borran los valores: se conservan los últimos
  mqttClient.on("close",()=>{
   estadoMqtt(ultimoVital.t ? "desconectado (se conserva el último dato)" : "desconectado");
  });
@@ -1976,7 +2827,6 @@ function iniciarMQTT(){
  });
 
  mqttClient.on("message",(topic,message)=>{
-
   let d;
   try{
    d = JSON.parse(message.toString());
@@ -1986,9 +2836,7 @@ function iniciarMQTT(){
   }
 
   const plano = aplanarJson(d);
-  console.log("MQTT recibido:",d);
 
-  // Solo se actualiza lo que llegó en este mensaje; lo demás se conserva
   const nuevos = {
    pulso:leerNumero(plano,CAMPOS_VITALES.pulso),
    respiracion:leerNumero(plano,CAMPOS_VITALES.respiracion),
@@ -2014,14 +2862,11 @@ function iniciarMQTT(){
 
   repintarVitales();
   actualizarEdadVitales();
-
   enviarVitalesAlServidor("sensor",nuevos);
-
  });
 
  if(timerEdadVitales) clearInterval(timerEdadVitales);
  timerEdadVitales = setInterval(actualizarEdadVitales,1000);
-
 }
 
 /* =========================================================
@@ -2029,14 +2874,10 @@ function iniciarMQTT(){
 ========================================================= */
 
 function iniciarConexionServidor(){
-
  if(typeof io==="undefined"){
-
   document.getElementById("connectionStatus").innerText =
    "Servidor: no conectado (falta servidor compartido)";
-
   return;
-
  }
 
  socket = io();
@@ -2046,8 +2887,6 @@ function iniciarConexionServidor(){
  }
  timerEstadoPaciente = setInterval(enviarEstadoPaciente,500);
 
- // Mientras la terapia está en curso, cada minuto se guarda una instantánea
- // (últimos signos vitales + ángulos) en el historial clínico
  if(timerInstantaneaTerapia){
   clearInterval(timerInstantaneaTerapia);
  }
@@ -2058,28 +2897,16 @@ function iniciarConexionServidor(){
  },60000);
 
  socket.on("connect",()=>{
-
-  document.getElementById("connectionStatus").innerText =
-   "Servidor: conectado";
-
+  document.getElementById("connectionStatus").innerText = "Servidor: conectado";
   socket.emit("patient:join",{
-
    cedula:pacienteActual.paciente.documento,
-
-   nombre:
-    `${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`
-
+   nombre:`${pacienteActual.paciente.nombres} ${pacienteActual.paciente.apellidos}`
   });
-
   vaciarVitalesPendientes();
-
  });
 
  socket.on("disconnect",()=>{
-
-  document.getElementById("connectionStatus").innerText =
-   "Servidor: desconectado";
-
+  document.getElementById("connectionStatus").innerText = "Servidor: desconectado";
  });
 
  socket.on("doctor:call-request",()=>{
@@ -2101,9 +2928,7 @@ function iniciarConexionServidor(){
 
   if(peerConnection && peerConnection.remoteDescription){
    try{
-    await peerConnection.addIceCandidate(
-     new RTCIceCandidate(data.candidate)
-    );
+    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
    }catch(error){
     console.error(error);
    }
@@ -2116,14 +2941,12 @@ function iniciarConexionServidor(){
   finalizarLlamadaLocal("El médico finalizó la llamada.");
  });
 
- // El médico habilita, bloquea o programa terapias
  socket.on("doctor:terapias",(data)=>{
   if(data && data.terapias){
    aplicarTerapiasDelMedico(data.terapias);
   }
  });
 
- // Control de la terapia por parte del médico
  socket.on("doctor:command",(data)=>{
   if(data && data.command){
    ejecutarComandoTerapia(data.command,"medico");
@@ -2136,7 +2959,6 @@ function iniciarConexionServidor(){
   actualizarDialogo("El médico ha confirmado tu solicitud de ayuda.");
   hablarIA("El médico ha confirmado tu solicitud de ayuda.");
  });
-
 }
 
 /* =========================================================
@@ -2144,13 +2966,14 @@ function iniciarConexionServidor(){
 ========================================================= */
 
 function simularAlertaClinica(){
-
  if(!pacienteActual){
   alert("Primero debes iniciar sesión.");
   return;
  }
 
  aiState = "ALERTA_MEDICA";
+ evaluacionHabilitada = false;
+ detenerTemporizadorDescanso();
 
  const alerta = {
   cedula:pacienteActual.paciente.documento,
@@ -2176,13 +2999,11 @@ function simularAlertaClinica(){
 }
 
 function iniciarTemporizadorMedico(){
-
  if(doctorTimerInterval){
   clearInterval(doctorTimerInterval);
  }
 
  doctorTimerInterval = setInterval(()=>{
-
   doctorSecondsRemaining--;
 
   const mins = Math.floor(doctorSecondsRemaining/60);
@@ -2195,13 +3016,11 @@ function iniciarTemporizadorMedico(){
    clearInterval(doctorTimerInterval);
    document.getElementById("doctorTimerLabel").innerText = "Tiempo de espera cumplido";
   }
-
  },1000);
-
 }
 
 /* =========================================================
-   VIDEOLLAMADA WEBRTC
+   VIDEOLLAMADA WEBRTC Y MODO ESPEJO
 ========================================================= */
 
 function mostrarAvisoMedico(texto,temporal){
@@ -2233,30 +3052,25 @@ function ocultarAvisoMedico(){
  if(el) el.style.display = "none";
 }
 
-/* Pista de video del avatar 3D (lo que el paciente ve en su pantalla) */
 function capturarDomEspejo(){
  const ids = [
   "repCounter","feedbackMessage","speechText","poseFeedback",
-  "angleShoulder","angleElbow","angleHip","valAngle","poseStatus",
+  "angleShoulder","angleElbow","angleHip","valAngle","poseStatus","ejercicioActualLabel",
   "heartRate","respiratoryRate","oxygenLevel","bodyTemperature","terapiasResumen"
  ];
 
  const datos = {};
-
  ids.forEach(id=>{
   const el = document.getElementById(id);
   if(el) datos[id] = el.innerText;
  });
-
  return datos;
 }
 
 function iniciarModoEspejo(cedula){
-
  document.body.classList.add("espejo");
 
  let ficha = null;
-
  try{
   const base = JSON.parse(localStorage.getItem("uac_base_pacientes") || "[]");
   ficha = base.find(p=>p.paciente && String(p.paciente.documento)===String(cedula)) || null;
@@ -2302,7 +3116,6 @@ function iniciarModoEspejo(cedula){
 }
 
 function recibirEstadoEspejo(evento){
-
  if(evento.origin !== location.origin) return;
 
  const msg = evento.data;
@@ -2326,17 +3139,21 @@ function recibirEstadoEspejo(evento){
   espejoEstado = d.estado;
  }
 
+ if(typeof d.ejercicioIdx === "number"){
+  espejoEjercicioIdx = d.ejercicioIdx;
+ }
+
+ if(typeof d.enDescanso === "boolean"){
+  espejoEnDescanso = d.enDescanso;
+ }
+
  sincronizarAnimacionEspejo();
 }
 
-/* El avatar se mueve igual que en la pantalla del paciente:
-   corre mientras la terapia está en curso, se congela en pausa */
 function sincronizarAnimacionEspejo(){
-
  if(!fbxMixer || !animationActions.length) return;
 
  if(espejoEstado==="TERAPIA"){
-
   if(!espejoAnimando){
    animationActions.forEach(action=>{
     action.reset();
@@ -2347,13 +3164,9 @@ function sincronizarAnimacionEspejo(){
   }else{
    animationActions.forEach(action=>{ action.paused = false; });
   }
-
  }else if(espejoEstado==="PAUSADA"){
-
   animationActions.forEach(action=>{ action.paused = true; });
-
  }else if(espejoAnimando){
-
   fbxMixer.stopAllAction();
   espejoAnimando = false;
  }
@@ -2380,8 +3193,6 @@ function obtenerPistaAvatar(){
  return null;
 }
 
-/* Si el paciente no tiene cámara, se envía un cuadro con un aviso
-   para que el médico siga viendo el avatar y los datos. */
 function obtenerPistaSinCamara(){
  if(!streamSinCamara){
   const c = document.createElement("canvas");
@@ -2403,18 +3214,19 @@ function obtenerPistaSinCamara(){
  return {track:streamSinCamara.getVideoTracks()[0],stream:streamSinCamara};
 }
 
-/* Estado que el médico ve en tiempo real */
 function enviarEstadoPaciente(){
  if(!socket || !socket.connected || !pacienteActual) return;
 
  socket.emit("patient:state",{
   estado:aiState,
-  repeticiones:currentRep,
+  repeticiones:totalRepsRutina,
+  ejercicioIdx:indiceEjercicioActual,
+  enDescanso:enDescanso,
   dia:diaActivoSeleccionado ? diaActivoSeleccionado.numDia : 1,
   angles:{
-   shoulder:document.getElementById("angleShoulder").innerText,
-   elbow:document.getElementById("angleElbow").innerText,
-   hip:document.getElementById("angleHip").innerText
+   shoulder:document.getElementById("angleShoulder")?.innerText ?? "--",
+   elbow:document.getElementById("angleElbow")?.innerText ?? "--",
+   hip:document.getElementById("angleHip")?.innerText ?? "--"
   },
   vitales:{
    pulso:document.getElementById("heartRate").innerText,
@@ -2444,7 +3256,6 @@ async function vaciarCandidatosPendientes(pc){
 }
 
 async function crearConexionWebRTC(){
-
  if(peerConnection){
   return peerConnection;
  }
@@ -2454,7 +3265,6 @@ async function crearConexionWebRTC(){
  const pc = new RTCPeerConnection(RTC_CONFIGURATION);
  peerConnection = pc;
 
- // Orden importante: 1) video de cámara (o aviso), 2) audio, 3) avatar
  const pistaCamara = localStream ? localStream.getVideoTracks()[0] : null;
 
  if(pistaCamara){
@@ -2469,7 +3279,6 @@ async function crearConexionWebRTC(){
    pc.addTrack(track,localStream);
   });
  }
-
 
  pc.ontrack = event=>{
   const remoteVideo = document.getElementById("doctorRemoteVideo");
@@ -2506,7 +3315,6 @@ async function crearConexionWebRTC(){
 }
 
 async function aceptarLlamadaEntrante(){
-
  if(!socket || !socket.connected || !pacienteActual){
   return;
  }
@@ -2527,7 +3335,6 @@ async function aceptarLlamadaEntrante(){
 
 async function recibirOferta(offer){
  try{
-
   if(peerConnection){
    try{peerConnection.close();}catch(e){}
    peerConnection = null;
@@ -2588,8 +3395,15 @@ function finalizarLlamadaLocal(mensaje){
 ========================================================= */
 
 function cerrarSesionPaciente(){
-
  aiState = "CERRADA";
+ evaluacionHabilitada = false;
+ detectorRunning = false;
+ detenerTemporizadorDescanso();
+ if(detectorAnimFrame){
+  cancelAnimationFrame(detectorAnimFrame);
+  detectorAnimFrame = null;
+ }
+
  if(timerEstadoPaciente){
   clearInterval(timerEstadoPaciente);
   timerEstadoPaciente = null;
@@ -2603,10 +3417,6 @@ function cerrarSesionPaciente(){
 
  if(doctorTimerInterval){
   clearInterval(doctorTimerInterval);
- }
-
- if(poseCamera){
-  try{poseCamera.stop();}catch(e){}
  }
 
  if(localStream){
@@ -2637,7 +3447,6 @@ function cerrarSesionPaciente(){
  if("speechSynthesis" in window){
   window.speechSynthesis.cancel();
  }
-
 }
 
 /* =========================================================
@@ -2649,3 +3458,4 @@ animate();
 </script>
 </body>
 </html>
+```[cite: 1, 2, 3]
