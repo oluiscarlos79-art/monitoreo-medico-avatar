@@ -1490,7 +1490,7 @@
       const aud = document.getElementById('patientRemoteAudio');
       if (aud) { aud.srcObject = null; }
       const audRemoto = document.getElementById('patientRemoteAudio');
-      if (aud) { aud.srcObject = null; }
+      if (audioPaciente) { audioPaciente.srcObject = null; }
       if (peerConnection) {
         peerConnection.ontrack = null;
         peerConnection.onicecandidate = null;
