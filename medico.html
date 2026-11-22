@@ -2876,5 +2876,44 @@
       renderizarListaPacientes();
     }
   </script>
+  <audio id="audioPacienteRemoto" autoplay playsinline></audio>
+  <script>
+    (function() {
+      function desbloquearAudioRemoto() {
+        const el = document.getElementById('audioPacienteRemoto');
+        if (el && el.srcObject) {
+          el.muted = false;
+          el.volume = 1.0;
+          el.play().catch(() => {});
+        }
+      }
+      document.addEventListener('click', desbloquearAudioRemoto, { passive: true });
+      const origRTCPeerConnection = window.RTCPeerConnection;
+      if (origRTCPeerConnection && !origRTCPeerConnection.__audioPatched) {
+        window.RTCPeerConnection = function(...args) {
+          const pc = new origRTCPeerConnection(...args);
+          pc.addEventListener('track', (ev) => {
+            if (ev.track && ev.track.kind === 'audio') {
+              let audEl = document.getElementById('audioPacienteRemoto');
+              if (!audEl) {
+                audEl = document.createElement('audio');
+                audEl.id = 'audioPacienteRemoto';
+                audEl.autoplay = true;
+                audEl.playsInline = true;
+                document.body.appendChild(audEl);
+              }
+              const stream = (ev.streams && ev.streams[0]) ? ev.streams[0] : new MediaStream([ev.track]);
+              audEl.srcObject = stream;
+              audEl.muted = false;
+              audEl.volume = 1.0;
+              audEl.play().catch(() => {});
+            }
+          });
+          return pc;
+        };
+        window.RTCPeerConnection.__audioPatched = true;
+      }
+    })();
+  </script>
 </body>
 </html>
