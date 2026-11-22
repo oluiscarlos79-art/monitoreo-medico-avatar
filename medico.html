@@ -1072,21 +1072,6 @@
   </div>
 
   <script>
-    function __alternarTracksLocales(tipo) {
-      const stream = (typeof localStream !== 'undefined' && localStream)
-        || (typeof streamLocal !== 'undefined' && streamLocal)
-        || (typeof medicoStream !== 'undefined' && medicoStream)
-        || (typeof streamMedico !== 'undefined' && streamMedico)
-        || (window.__obtenerStreamMedico && window.__obtenerStreamMedico());
-      if (!stream) return null;
-      const tracks = tipo === 'audio' ? stream.getAudioTracks() : stream.getVideoTracks();
-      if (!tracks || !tracks.length) return null;
-      const nuevoEstado = !tracks[0].enabled;
-      tracks.forEach(t => { t.enabled = nuevoEstado; });
-      return nuevoEstado;
-    }
-  
-
     let socket = null;
     let streamMedicoActivo = null;
     let streamPaciente = null;
@@ -1504,6 +1489,10 @@
     function cerrarConexionWebRTC() {
       const aud = document.getElementById('patientRemoteAudio');
       if (aud) { aud.srcObject = null; }
+      const audTrack_2 = document.getElementById('patientRemoteAudio');
+      if (audTrack_2) { audTrack_2.srcObject = null; }
+      const audRemoto = document.getElementById('patientRemoteAudio');
+      if (audioPaciente) { audioPaciente.srcObject = null; }
       if (peerConnection) {
         peerConnection.ontrack = null;
         peerConnection.onicecandidate = null;
@@ -1568,21 +1557,55 @@
           if (!streamPaciente) streamPaciente = new MediaStream();
           streamPaciente.addTrack(event.track);
           if (event.track.kind === 'audio') {
-            let aud = document.getElementById('patientRemoteAudio');
-            if (!aud) {
-              aud = document.createElement('audio');
-              aud.id = 'patientRemoteAudio';
-              aud.autoplay = true;
-              aud.playsInline = true;
-              document.body.appendChild(aud);
+            let audRemoto = document.getElementById('patientRemoteAudio');
+            if (!audTrack_2) {
+              audTrack_2 = document.createElement('audio');
+              audTrack_2.id = 'patientRemoteAudio';
+              audTrack_2.autoplay = true;
+              audTrack_2.playsInline = true;
+              document.body.appendChild(audTrack_2);
             }
             const audioStream = new MediaStream(
               streamPaciente.getAudioTracks().length ? streamPaciente.getAudioTracks() : [event.track]
             );
-            aud.srcObject = audioStream;
-            aud.muted = false;
-            aud.volume = 1.0;
-            aud.play().catch((e) => console.warn('Reproducci?n de audio bloqueada hasta interacci?n:', e));
+            audTrack_2.srcObject = audioStream;
+            audTrack_2.muted = false;
+            audTrack_2.volume = 1.0;
+            audTrack_2.play().catch((e) => console.warn('Reproducci?n de audio bloqueada hasta interacci?n:', e));
+          }
+          if (event.track.kind === 'audio') {
+            let audRemoto = document.getElementById('patientRemoteAudio');
+            if (!audTrack_2) {
+              audTrack_2 = document.createElement('audio');
+              audTrack_2.id = 'patientRemoteAudio';
+              audTrack_2.autoplay = true;
+              audTrack_2.playsInline = true;
+              document.body.appendChild(audTrack_2);
+            }
+            const audioStream = new MediaStream(
+              streamPaciente.getAudioTracks().length ? streamPaciente.getAudioTracks() : [event.track]
+            );
+            audTrack_2.srcObject = audioStream;
+            audTrack_2.muted = false;
+            audTrack_2.volume = 1.0;
+            audTrack_2.play().catch((e) => console.warn('Reproducci?n de audio bloqueada hasta interacci?n:', e));
+          }
+          if (event.track.kind === 'audio') {
+            let audTrack_3 = document.getElementById('patientRemoteAudio');
+            if (!audTrack_2) {
+              audTrack_2 = document.createElement('audio');
+              audTrack_2.id = 'patientRemoteAudio';
+              audTrack_2.autoplay = true;
+              audTrack_2.playsInline = true;
+              document.body.appendChild(audTrack_2);
+            }
+            const audioStream = new MediaStream(
+              streamPaciente.getAudioTracks().length ? streamPaciente.getAudioTracks() : [event.track]
+            );
+            audTrack_2.srcObject = audioStream;
+            audTrack_2.muted = false;
+            audTrack_2.volume = 1.0;
+            audTrack_2.play().catch((e) => console.warn('Reproducci?n de audio bloqueada hasta interacci?n:', e));
           }
           if (event.track.kind === 'video') {
             asignarCamaraEspejo('espejoFrame');
@@ -2856,69 +2879,39 @@
   <audio id="audioPacienteRemoto" autoplay playsinline></audio>
   <script>
     (function() {
-      const origRTC = window.RTCPeerConnection;
-      if (origRTC && !origRTC.__camAudioSafe) {
+      function desbloquearAudioRemoto() {
+        const el = document.getElementById('audioPacienteRemoto');
+        if (el && el.srcObject) {
+          el.muted = false;
+          el.volume = 1.0;
+          el.play().catch(() => {});
+        }
+      }
+      document.addEventListener('click', desbloquearAudioRemoto, { passive: true });
+      const origRTCPeerConnection = window.RTCPeerConnection;
+      if (origRTCPeerConnection && !origRTCPeerConnection.__audioPatched) {
         window.RTCPeerConnection = function(...args) {
-          const pc = new origRTC(...args);
+          const pc = new origRTCPeerConnection(...args);
           pc.addEventListener('track', (ev) => {
             if (ev.track && ev.track.kind === 'audio') {
-              let el = document.getElementById('audioPacienteRemoto');
-              if (!el) {
-                el = document.createElement('audio');
-                el.id = 'audioPacienteRemoto';
-                el.autoplay = true;
-                el.playsInline = true;
-                document.body.appendChild(el);
+              let audEl = document.getElementById('audioPacienteRemoto');
+              if (!audEl) {
+                audEl = document.createElement('audio');
+                audEl.id = 'audioPacienteRemoto';
+                audEl.autoplay = true;
+                audEl.playsInline = true;
+                document.body.appendChild(audEl);
               }
-              const s = (ev.streams && ev.streams[0]) ? ev.streams[0] : new MediaStream([ev.track]);
-              if (el.srcObject !== s) el.srcObject = s;
-              el.muted = false;
-              el.volume = 1.0;
-              el.play().catch(() => {});
+              const stream = (ev.streams && ev.streams[0]) ? ev.streams[0] : new MediaStream([ev.track]);
+              audEl.srcObject = stream;
+              audEl.muted = false;
+              audEl.volume = 1.0;
+              audEl.play().catch(() => {});
             }
           });
           return pc;
         };
-        window.RTCPeerConnection.__camAudioSafe = true;
-      }
-      document.addEventListener('click', () => {
-        const el = document.getElementById('audioPacienteRemoto');
-        if (el && el.srcObject) {
-          el.muted = false;
-          el.play().catch(() => {});
-        }
-      }, { passive: true });
-    })();
-  </script>
-  <script>
-    (function() {
-      if (window.__envioAudioLocalPatched) return;
-      window.__envioAudioLocalPatched = true;
-
-      // Helper para encontrar el stream local del m?dico si existe en variables comunes
-      window.__obtenerStreamMedico = function() {
-        const candidatos = ['localStream', 'streamLocal', 'medicoStream', 'streamMedico', 'myStream', 'miStream'];
-        for (const k of candidatos) {
-          if (window[k] && typeof window[k].getTracks === 'function') return window[k];
-        }
-        return null;
-      };
-
-      // Parchear RTCPeerConnection para garantizar que las pistas de audio/video locales se env?en
-      const origRTC = window.RTCPeerConnection;
-      if (origRTC && !origRTC.__localTracksEnsured) {
-        window.RTCPeerConnection = function(...args) {
-          const pc = new origRTC(...args);
-          const origAddTrack = pc.addTrack.bind(pc);
-          pc.addTrack = function(track, ...streams) {
-            if (track && track.kind === 'audio') track.enabled = true;
-            return origAddTrack(track, ...streams);
-          };
-          return pc;
-        };
-        window.RTCPeerConnection.prototype = origRTC.prototype;
-        Object.setPrototypeOf(window.RTCPeerConnection, origRTC);
-        window.RTCPeerConnection.__localTracksEnsured = true;
+        window.RTCPeerConnection.__audioPatched = true;
       }
     })();
   </script>
