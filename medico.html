@@ -591,9 +591,8 @@
     <button onclick="loginMedico()" style="width: 100%; margin-top: 8px; padding: 11px;">Ingresar al Panel</button>
     <p id="loginError" style="color: var(--danger); font-size: 0.82rem; margin-top: 10px; display: none; text-align: center; font-weight: 600;">Credenciales inválidas.</p>
 
-    <div class="auth-links">
-      <button type="button" class="link-btn" onclick="abrirModalRecuperarClave()">¿Olvidaste tu contraseña?</button>
-      <button type="button" class="link-btn" onclick="abrirModalRegistroMedico()">Registrar nuevo médico</button>
+    <div class="auth-links" style="justify-content:center;">
+      <button type="button" class="link-btn" onclick="abrirModalRegistroMedico()">Registrar nuevo m?dico</button>
     </div>
   </div>
 
@@ -638,39 +637,7 @@
     </div>
   </div>
 
-  <div id="recuperarClaveModal" class="modal-backdrop">
-    <div class="modal-box-sm">
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
-        <h2 style="font-size:1.15rem;">Recuperar Contraseña</h2>
-        <button type="button" class="btn-secondary" style="padding:5px 10px;" onclick="cerrarModalRecuperarClave()">✕</button>
-      </div>
-      <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:14px;">
-        Ingresa el correo electrónico asociado a tu cuenta médica para recibir un código de verificación.
-      </p>
-      <div class="form-group">
-        <label>Correo electrónico registrado</label>
-        <input type="email" id="recEmail" placeholder="nombre@uac.edu.co" onkeydown="if(event.key==='Enter')enviarRecuperacionClave()">
-      </div>
-
-      <div id="pasoRestablecerClave" style="display:none; border-top:1px solid var(--border); padding-top:14px; margin-top:14px;">
-        <div class="form-group">
-          <label>Código de 6 dígitos recibido</label>
-          <input type="text" id="recCodigo" placeholder="Ej. 482910" maxlength="6">
-        </div>
-        <div class="form-group">
-          <label>Nueva contraseña</label>
-          <input type="password" id="recNuevaClave" placeholder="••••••••">
-        </div>
-        <button type="button" class="btn-call" style="width:100%;" onclick="confirmarNuevaClave()">Guardar Nueva Contraseña</button>
-      </div>
-
-      <div id="recuperarClaveFeedback" class="auth-banner"></div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
-        <button type="button" id="btnEnviarCodigoRec" style="flex:1;" onclick="enviarRecuperacionClave()">Enviar código al correo</button>
-        <button type="button" class="btn-secondary" onclick="cerrarModalRecuperarClave()">Cerrar</button>
-      </div>
-    </div>
-  </div>
+  
 
   <div id="medicoPanel">
     <div id="emergencyAlertBanner">
