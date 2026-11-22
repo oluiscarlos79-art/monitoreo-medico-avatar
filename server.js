@@ -279,6 +279,27 @@ app.post("/api/medico/registro", (req, res) => {
   };
   guardarDb();
 
+  if (transporter) {
+    transporter.sendMail({
+      from: `"Portal M?dico UAC" <${process.env.SMTP_USER}>`,
+      to: mail,
+      subject: "Bienvenido(a) al Portal M?dico UAC ? Cuenta creada",
+      text: `Hola ${db.medicos[u].nombre},\n\n?Bienvenido(a) al Portal M?dico de Telemedicina UAC!\n\nTu cuenta ha sido creada exitosamente:\n- Usuario: ${u}\n- Correo: ${mail}\n- Especialidad: ${db.medicos[u].especialidad || 'General'}\n\nYa puedes iniciar sesi?n en la plataforma.`,
+      html: `<div style="font-family:sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">
+        <h2 style="color:#0f62fe;margin-top:0;">?Bienvenido(a), ${db.medicos[u].nombre}!</h2>
+        <p>Tu cuenta en el <strong>Portal M?dico de Telemedicina UAC</strong> ha sido creada exitosamente.</p>
+        <div style="background:#f8fafc;padding:14px;border-radius:8px;margin:16px 0;border:1px solid #e2e8f0;">
+          <p style="margin:4px 0;"><strong>Usuario:</strong> ${u}</p>
+          <p style="margin:4px 0;"><strong>Correo:</strong> ${mail}</p>
+          <p style="margin:4px 0;"><strong>Especialidad:</strong> ${db.medicos[u].especialidad || 'General'}</p>
+        </div>
+        <p style="font-size:13px;color:#64748b;">Ya puedes iniciar sesi?n para gestionar tus pacientes, historias cl?nicas y sesiones de terapia en vivo.</p>
+      </div>`
+    }).catch(err => console.error("Error enviando correo de bienvenida:", err.message));
+  } else {
+    console.log(`[SIMULACI?N BIENVENIDA] Cuenta creada para ${db.medicos[u].nombre} (${mail}) | Usuario: ${u}`);
+  }
+
   res.json({ ok: true });
 });
 
