@@ -2,104 +2,581 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal Médico — UAC Tele-Rehabilitación (Historial, KPIs y Diagnóstico IA)</title>
   <!-- Socket.IO -->
   <script src="/socket.io/socket.io.js"></script>
   <style>
+    :root {
+      --primary: #4589ff;
+      --primary-hover: #78a9ff;
+      --primary-light: #162238;
+      --secondary: #08bdba;
+      --secondary-light: #112a30;
+      --bg-page: #0b111e;
+      --bg-card: #131c2e;
+      --bg-subtle: #1a253b;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-light: #64748b;
+      --border: #27354f;
+      --border-strong: #36496b;
+      --success: #42be65;
+      --success-bg: #102a1c;
+      --warning: #f1c21b;
+      --warning-bg: #2e250b;
+      --danger: #ff8389;
+      --danger-bg: #331418;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; background-color: #0b0b14; color: #fff; min-height: 100vh; padding: 20px; display: flex; justify-content: center; align-items: flex-start; }
-    
-    #loginContainer { width: 100%; max-width: 400px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); margin-top: 10vh; }
-    #medicoPanel { display: none; width: 100%; max-width: 1200px; background: #141422; padding: 30px; border-radius: 12px; border: 1px solid rgba(0,210,106,0.3); }
-    
-    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
-    .panel-header img { height: 50px; width: auto; object-fit: contain; }
-    
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      line-height: 1.5;
+    }
+
+    /* ---------- LOGIN, REGISTRO Y RECUPERACIÓN ---------- */
+    #loginContainer {
+      width: 100%;
+      max-width: 440px;
+      background: var(--bg-card);
+      padding: 36px 32px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      margin-top: 6vh;
+    }
+    .auth-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .auth-header img {
+      height: 64px;
+      object-fit: contain;
+      margin-bottom: 12px;
+    }
+    .auth-header h1 {
+      font-size: 1.45rem;
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .auth-subtitle {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .auth-links {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      font-size: 0.82rem;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-weight: 600;
+      padding: 0;
+      font-size: 0.82rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .link-btn:hover {
+      background: none;
+      text-decoration: underline;
+      color: var(--primary-hover);
+    }
+
+    /* ---------- PANEL PRINCIPAL ---------- */
+    #medicoPanel {
+      display: none;
+      width: 100%;
+      max-width: 1280px;
+      background: var(--bg-card);
+      padding: 28px 32px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .panel-header img { height: 54px; width: auto; object-fit: contain; }
+
     #emergencyAlertBanner {
       display: none;
-      background: rgba(255, 77, 77, 0.18);
-      border: 1.5px solid #ff4d4d;
-      border-radius: 8px;
-      padding: 14px 18px;
-      margin-bottom: 20px;
+      background: var(--danger-bg);
+      border: 1.5px solid var(--danger);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 22px;
       animation: pulseAlert 1.2s infinite alternate;
+      gap: 12px;
+      flex-wrap: wrap;
     }
     #emergencyAlertBanner.active { display: flex; justify-content: space-between; align-items: center; }
     @keyframes pulseAlert {
-      from { border-color: rgba(255,77,77,0.4); box-shadow: 0 0 5px rgba(255,77,77,0.2); }
-      to { border-color: #ff4d4d; box-shadow: 0 0 18px rgba(255,77,77,0.5); }
+      from { border-color: rgba(218, 30, 40, 0.45); box-shadow: 0 0 6px rgba(218, 30, 40, 0.15); }
+      to { border-color: var(--danger); box-shadow: 0 0 18px rgba(218, 30, 40, 0.35); }
     }
 
-    h1, h2, h3 { color: #00d26a; }
-    h2 { font-size: 1.2rem; }
-    h3 { font-size: 0.9rem; margin-bottom: 10px; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.5px; }
-    
-    .form-group { margin-bottom: 12px; }
-    label { display: block; font-size: 0.8rem; color: #a0a0c0; margin-bottom: 4px; }
-    input, select, textarea { width: 100%; padding: 8px 10px; background: #1a1a2e; border: 1px solid #303050; color: #fff; border-radius: 6px; font-size: 0.85rem; }
-    textarea { resize: vertical; }
-    
-    button { background-color: #00d26a; color: #0f0f1b; border: none; padding: 10px 16px; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
-    button:hover { background-color: #00b359; }
-    .btn-secondary { background: #303050; color: #fff; }
-    .btn-secondary:hover { background: #404070; }
-    .btn-danger { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; border: 1px solid #ff4d4d; }
-    .btn-call { background: rgba(0, 210, 106, 0.2); color: #00d26a; border: 1px solid #00d26a; }
-    .btn-call:hover { background: rgba(0, 210, 106, 0.35); }
-    .btn-info { background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid #3498db; }
-    
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    
-    .status-badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; background: rgba(0,210,106,0.2); color: #00d26a; }
-    .auth-banner { margin-top: 15px; padding: 12px; border-radius: 6px; text-align: center; font-weight: bold; font-size: 0.9rem; display: none; }
-    .auth-active { background: rgba(0,210,106,0.15); color: #00d26a; border: 1px solid #00d26a; }
+    h1, h2 { color: var(--primary); }
+    h2 { font-size: 1.25rem; font-weight: 700; }
+    h3 {
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      color: var(--primary-hover);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      font-weight: 700;
+    }
 
-    .tabs-nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #303050; padding-bottom: 10px; flex-wrap: wrap; }
-    .tab-btn { background: transparent; color: #a0a0c0; border: 1px solid transparent; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-    .tab-btn.active { background: rgba(0,210,106,0.15); color: #00d26a; border-color: #00d26a; }
+    .section-card {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .form-group { margin-bottom: 14px; }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      color: var(--text-main);
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 98, 254, 0.14);
+    }
+    textarea { resize: vertical; }
+
+    button {
+      background-color: var(--primary);
+      color: #ffffff;
+      border: 1px solid transparent;
+      padding: 10px 16px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    button:hover { background-color: var(--primary-hover); }
+    .btn-secondary { background: #23304a; color: #e2e8f0; border-color: var(--border-strong); }
+    .btn-secondary:hover { background: #2d3d5e; }
+    .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger:hover { background: #471c22; }
+    .btn-call { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
+    .btn-call:hover { background: #163b27; }
+    .btn-info { background: var(--primary-light); color: var(--primary); border: 1px solid #2c4a7c; }
+    .btn-info:hover { background: #1e3152; }
+    .btn-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid #f1c21b; }
+    .btn-warning:hover { background: #423510; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 12px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #2c4a7c;
+    }
+    .auth-banner {
+      margin-top: 15px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      text-align: center;
+      font-weight: 600;
+      font-size: 0.88rem;
+      display: none;
+    }
+    .auth-active { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
+    .auth-info-banner { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary); }
+
+    .tabs-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 22px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .tab-btn:hover { background: var(--primary-light); color: var(--primary); }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    .patients-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
-    .patients-table th, .patients-table td { padding: 10px; text-align: left; border-bottom: 1px solid #202035; }
-    .patients-table th { color: #a0a0c0; font-size: 0.75rem; text-transform: uppercase; }
-    .cred-badge { font-family: monospace; background: rgba(0,210,106,0.1); color: #00d26a; padding: 3px 6px; border-radius: 4px; }
-    .calc-edad { font-size: 0.75rem; color: #00d26a; margin-top: 3px; display: block; }
+    .patients-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem; background: var(--bg-card); border-radius: var(--radius-sm); overflow: hidden; }
+    .patients-table th, .patients-table td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .patients-table th {
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .patients-table tbody tr:hover { background: #1d2942; }
+    .cred-badge {
+      font-family: 'Consolas', monospace;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      border: 1px solid #2c4a7c;
+    }
+    .calc-edad { font-size: 0.76rem; color: var(--secondary); font-weight: 600; margin-top: 4px; display: block; }
 
-    #historialClinicoModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.94); z-index: 1200; padding: 25px; overflow-y: auto; justify-content: center; align-items: flex-start; }
-    .history-container { width: 100%; max-width: 1050px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 25px; margin: auto; }
-    
-    .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
-    .kpi-card { background: #1a1a2e; border: 1px solid #303050; border-radius: 8px; padding: 14px; text-align: center; }
-    .kpi-card .val { font-size: 1.5rem; font-weight: bold; color: #00d26a; margin-top: 4px; font-family: monospace; }
-    .kpi-card .lbl { font-size: 0.75rem; color: #a0a0c0; text-transform: uppercase; }
+    /* ---------- MODALES ---------- */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(3px);
+      z-index: 1200;
+      padding: 24px;
+      overflow-y: auto;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .modal-box-sm {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 6vh auto;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-box-md {
+      width: 100%;
+      max-width: 820px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: 3vh auto;
+      box-shadow: var(--shadow-lg);
+    }
 
-    .score-badge-good { color: #2ecc71; font-weight: bold; }
-    .score-badge-fair { color: #f39c12; font-weight: bold; }
-    .score-badge-bad { color: #e74c3c; font-weight: bold; }
+    #historialClinicoModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(3px);
+      z-index: 1200;
+      padding: 24px;
+      overflow-y: auto;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .history-container {
+      width: 100%;
+      max-width: 1200px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      margin: auto;
+      box-shadow: var(--shadow-lg);
+    }
 
-    #liveCallModal { display: none; position: fixed; inset: 0; background: rgba(11, 11, 20, 0.92); z-index: 1000; padding: 25px; flex-direction: column; align-items: center; justify-content: center; }
-    .call-container { width: 100%; max-width: 900px; background: #141422; border: 1px solid rgba(0,210,106,0.4); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-    .call-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; min-height: 380px; }
-    .call-box { background: #0b0b14; border: 1px solid #303050; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; padding: 10px; text-align: center; }
+    /* Sub-pestañas dentro de Historia Clínica */
+    .history-subtabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .history-subtab-btn {
+      background: var(--bg-subtle);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.84rem;
+    }
+    .history-subtab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .history-subview { display: none; }
+    .history-subview.active { display: block; }
+
+    /* KPIs generales */
+    .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--primary);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .kpi-card .val { font-size: 1.55rem; font-weight: 700; color: var(--primary); margin-top: 6px; font-family: 'Consolas', monospace; }
+    .kpi-card .lbl { font-size: 0.74rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+
+    /* Grid de gráficas con KPI superior */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chart-kpi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      gap: 10px;
+    }
+    .chart-kpi-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .chart-kpi-ref {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .chart-kpi-value-wrap {
+      text-align: right;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chart-kpi-val {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-family: 'Consolas', monospace;
+      color: var(--primary);
+    }
+    .trend-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .trend-up { background: var(--success-bg); color: var(--success); border: 1px solid #1f5c35; }
+    .trend-down { background: var(--danger-bg); color: var(--danger); border: 1px solid #6b222a; }
+    .trend-flat { background: #23304a; color: #cbd5e1; border: 1px solid var(--border-strong); }
+
+    .score-badge-good { color: var(--success); font-weight: bold; }
+    .score-badge-fair { color: var(--warning); font-weight: bold; }
+    .score-badge-bad { color: var(--danger); font-weight: bold; }
+
+    /* ---------- VIDEOCONFERENCIA ---------- */
+    #liveCallModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      padding: 20px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .call-container {
+      width: 100%;
+      max-width: 1140px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: var(--shadow-lg);
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    .call-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 380px; }
+    .call-box {
+      background: #0f172a;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      padding: 10px;
+      text-align: center;
+    }
     .call-box video { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
-    .mode-tag { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); color: #00d26a; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; z-index: 5; border: 1px solid rgba(0,210,106,0.3); }
-  </style>
-  <style>
-    #callStagesGrid { grid-template-columns: 2.4fr 1fr; grid-template-rows: 1fr 1fr; min-height: 470px; }
-    #callStagesGrid > .call-box:nth-child(1) { grid-column: 2; grid-row: 1; }
-    #callStagesGrid > .call-box:nth-child(2) { grid-column: 1; grid-row: 1 / span 2; }
-    #callStagesGrid > .call-box:nth-child(3) { grid-column: 2; grid-row: 2; }
-  </style>
-  <style>
+    .mode-tag {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(15, 23, 42, 0.82);
+      color: #ffffff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      font-family: 'Consolas', monospace;
+      z-index: 5;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* Grilla ajustada sin recuadro de cámara del paciente: Pantalla del paciente + Retorno médico */
+    #callStagesGrid {
+      grid-template-columns: 2.3fr 1fr;
+      grid-template-rows: 1fr;
+      min-height: 450px;
+    }
+    #callStagesGrid > #espejoBox { grid-column: 1; grid-row: 1; }
+    #callStagesGrid > #doctorStageBox { grid-column: 2; grid-row: 1; }
+
+    /* Switch toggle para habilitar terapias */
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      margin: 0;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #cbd5e1;
+      transition: 0.25s;
+      border-radius: 24px;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.25s;
+      border-radius: 50%;
+    }
+    .toggle-switch input:checked + .toggle-slider { background-color: var(--success); }
+    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+    @media (max-width: 900px) {
+      .grid-3, .kpi-cards, .charts-grid { grid-template-columns: 1fr; }
+      .grid-2, #callStagesGrid { grid-template-columns: 1fr; }
+      #callStagesGrid > #doctorStageBox { grid-column: 1; grid-row: 2; min-height: 240px; }
+    }
+
     @media print {
       body { background: #fff !important; color: #000 !important; display: block !important; padding: 0 !important; }
       body > *:not(#historialClinicoModal) { display: none !important; }
       #historialClinicoModal { display: block !important; position: static !important; background: #fff !important; padding: 0 !important; }
-      .history-container { background: #fff !important; border: 0 !important; max-width: 100% !important; padding: 0 !important; }
-      .history-container * { color: #000 !important; background: transparent !important; border-color: #999 !important; }
+      .history-container { background: #fff !important; border: 0 !important; box-shadow: none !important; max-width: 100% !important; padding: 0 !important; }
+      .history-container * { color: #000 !important; background: transparent !important; border-color: #999 !important; box-shadow: none !important; }
       .no-print { display: none !important; }
+      .charts-grid { grid-template-columns: 1fr 1fr !important; }
       #listaApuntes, #listaTerapias, #listaEventos { max-height: none !important; overflow: visible !important; }
       div[style*="overflow"] { max-height: none !important; overflow: visible !important; }
     }
@@ -109,29 +586,98 @@
 
   <!-- LOGIN MÉDICO -->
   <div id="loginContainer">
-    <div style="text-align: center; margin-bottom: 20px;">
-      <img src="./escudo_uac.png" alt="Escudo UAC" style="height: 60px; object-fit: contain; margin-bottom: 10px;">
-      <h1>Acceso Médico UAC</h1>
+    <div class="auth-header">
+      <img src="./escudo_uac.png" alt="Escudo UAC">
+      <h1>Portal Médico UAC</h1>
+      <p class="auth-subtitle">Credencial clínica de acceso a tele-rehabilitación</p>
     </div>
-    <p style="font-size: 0.85rem; color: #a0a0c0; margin-bottom: 20px; text-align: center;">Credencial clínica de acceso</p>
     <div class="form-group">
       <label>Usuario</label>
-      <input type="text" id="medUser" placeholder="Usuario" autocomplete="username">
+      <input type="text" id="medUser" placeholder="Ingresa tu usuario médico" autocomplete="username">
     </div>
     <div class="form-group">
       <label>Contraseña</label>
       <input type="password" id="medPin" placeholder="•••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginMedico()">
     </div>
-    <button onclick="loginMedico()" style="width: 100%; margin-top: 10px;">Ingresar al Panel</button>
-    <p id="loginError" style="color: #ff4d4d; font-size: 0.8rem; margin-top: 10px; display: none; text-align: center;">Credenciales inválidas.</p>
+    <button onclick="loginMedico()" style="width: 100%; margin-top: 8px; padding: 11px;">Ingresar al Panel</button>
+    <p id="loginError" style="color: var(--danger); font-size: 0.82rem; margin-top: 10px; display: none; text-align: center; font-weight: 600;">Credenciales inválidas.</p>
+
+    <div class="auth-links">
+      <button type="button" class="link-btn" onclick="abrirModalRecuperarClave()">¿Olvidaste tu contraseña?</button>
+      <button type="button" class="link-btn" onclick="abrirModalRegistroMedico()">Registrar nuevo médico</button>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRO DE NUEVO MÉDICO -->
+  <div id="registroMedicoModal" class="modal-backdrop">
+    <div class="modal-box-sm">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+        <h2 style="font-size:1.15rem;">Registro de Nuevo Médico</h2>
+        <button type="button" class="btn-secondary" style="padding:5px 10px;" onclick="cerrarModalRegistroMedico()">✕</button>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom:14px;">Crea una cuenta profesional para acceder al sistema clínico de tele-rehabilitación.</p>
+      <div class="form-group">
+        <label>Nombre completo del profesional</label>
+        <input type="text" id="regMedNombre" placeholder="Ej. Dra. Laura Gómez">
+      </div>
+      <div class="form-group">
+        <label>Correo electrónico institucional</label>
+        <input type="email" id="regMedEmail" placeholder="medico@uac.edu.co">
+      </div>
+      <div class="form-group">
+        <label>Registro médico / Especialidad</label>
+        <input type="text" id="regMedEspecialidad" placeholder="Ej. Fisiatría / Rehabilitación - RM 12345">
+      </div>
+      <div class="form-group">
+        <label>Usuario de acceso</label>
+        <input type="text" id="regMedUser" placeholder="Usuario para iniciar sesión">
+      </div>
+      <div class="grid-2" style="gap:10px;">
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="regMedPin" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label>Confirmar contraseña</label>
+          <input type="password" id="regMedPinConfirm" placeholder="••••••••">
+        </div>
+      </div>
+      <div id="registroMedicoFeedback" class="auth-banner"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button type="button" style="flex:1;" onclick="registrarNuevoMedico()">Crear Cuenta Médica</button>
+        <button type="button" class="btn-secondary" onclick="cerrarModalRegistroMedico()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: RECUPERACIÓN DE CONTRASEÑA -->
+  <div id="recuperarClaveModal" class="modal-backdrop">
+    <div class="modal-box-sm">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+        <h2 style="font-size:1.15rem;">Recuperar Contraseña</h2>
+        <button type="button" class="btn-secondary" style="padding:5px 10px;" onclick="cerrarModalRecuperarClave()">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:14px;">
+        Ingresa el correo electrónico asociado a tu cuenta médica. Te enviaremos un enlace o código de verificación para restablecer tu contraseña.
+      </p>
+      <div class="form-group">
+        <label>Correo electrónico registrado</label>
+        <input type="email" id="recEmail" placeholder="nombre@uac.edu.co" onkeydown="if(event.key==='Enter')enviarRecuperacionClave()">
+      </div>
+      <div id="recuperarClaveFeedback" class="auth-banner"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button type="button" style="flex:1;" onclick="enviarRecuperacionClave()">Enviar enlace de recuperación</button>
+        <button type="button" class="btn-secondary" onclick="cerrarModalRecuperarClave()">Cerrar</button>
+      </div>
+    </div>
   </div>
 
   <!-- PANEL CLÍNICO GENERAL -->
   <div id="medicoPanel">
     <div id="emergencyAlertBanner">
       <div>
-        <span style="color:#ff4d4d; font-weight:bold; font-size:0.85rem;">🚨 URGENCIA / AYUDA MÉDICA SOLICITADA</span>
-        <p id="emergencyAlertText" style="font-size:0.8rem; color:#fff; margin-top:3px;">Paciente solicita asistencia clínica en vivo.</p>
+        <span style="color:var(--danger); font-weight:700; font-size:0.88rem;">🚨 URGENCIA / AYUDA MÉDICA SOLICITADA</span>
+        <p id="emergencyAlertText" style="font-size:0.84rem; color:var(--text-main); margin-top:3px;">Paciente solicita asistencia clínica en vivo.</p>
       </div>
       <div style="display:flex; gap:10px;">
         <button class="btn-danger" style="padding:8px 14px;" onclick="unirMedicoAUrgencia()">🟢 Entrar a Terapia / Intervenir</button>
@@ -141,9 +687,11 @@
 
     <div class="panel-header">
       <div>
-        <span class="status-badge" id="serverConnectionStatus">SERVIDOR: CONECTANDO...</span>
-        <button class="btn-secondary" style="padding:4px 10px; font-size:0.7rem; margin-left:8px;" onclick="cerrarSesionMedico()">Cerrar sesión</button>
-        <h2 style="margin-top: 8px;">Control de Historias Clínicas, Métricas y Desempeño por Sesión</h2>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="status-badge" id="serverConnectionStatus">SERVIDOR: CONECTANDO...</span>
+          <button class="btn-secondary" style="padding:5px 12px; font-size:0.76rem;" onclick="cerrarSesionMedico()">Cerrar sesión</button>
+        </div>
+        <h2 style="margin-top: 10px;">Control de Historias Clínicas, Métricas y Desempeño por Sesión</h2>
       </div>
       <img src="./escudo_uac.png" alt="Escudo UAC">
     </div>
@@ -155,259 +703,370 @@
 
     <!-- PESTAÑA 1: FORMULARIO -->
     <div id="tab-formulario" class="tab-content active">
-      <h3>1. Datos de Identificación (Cédula = Credencial de Paciente)</h3>
-      <div class="grid-3">
-        <div class="form-group"><label>Nombres</label><input type="text" id="patNombre" value="Carlos Eduardo"></div>
-        <div class="form-group"><label>Apellidos</label><input type="text" id="patApellido" value="Martínez Pérez"></div>
-        <div class="form-group"><label>Cédula / ID (Acceso Paciente)</label><input type="text" id="patDoc" value="1045238910"></div>
-      </div>
-      <div class="grid-3">
-        <div class="form-group">
-          <label>Fecha de Nacimiento</label>
-          <input type="date" id="patNacimiento" value="1992-05-14" onchange="calcularEdadAutomatica()">
-          <span id="edadCalculadaDisplay" class="calc-edad">Edad calculada: 34 años</span>
+      <div class="section-card">
+        <h3>1. Datos de Identificación (Cédula = Credencial de Paciente)</h3>
+        <div class="grid-3">
+          <div class="form-group"><label>Nombres</label><input type="text" id="patNombre" placeholder="Ingrese nombres del paciente"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="patApellido" placeholder="Ingrese apellidos del paciente"></div>
+          <div class="form-group"><label>Cédula / ID (Acceso Paciente)</label><input type="text" id="patDoc" placeholder="Número de documento"></div>
         </div>
-        <div class="form-group">
-          <label>Género</label>
-          <select id="patGenero">
-            <option value="Masculino">Masculino</option>
-            <option value="Femenino">Femenino</option>
-            <option value="Otro">Otro</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Nivel de Dolor Basal (EVA 0-10)</label>
-          <input type="number" id="patEva" min="0" max="10" value="3">
-        </div>
-      </div>
-
-      <h3 style="margin-top: 15px;">2. Anamnesis y Segmento Comprometido</h3>
-      <div class="grid-3">
-        <div class="form-group">
-          <label>Patología / Condición de Base</label>
-          <select id="patPatologia">
-            <option value="RIGIDEZ_POSTRAUMA">Rigidez articular post-trauma / fractura</option>
-            <option value="ACV_HEMI_SUBAGUDA">Hemiparesia post-ACV (Fase subaguda)</option>
-            <option value="TENDINOPATIA_HOMBRO">Tendinopatía / Limitación manguito rotador</option>
-            <option value="POSTOP_CODO">Postoperatorio de codo (control ROM)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Lado Afectado</label>
-          <select id="patLado">
-            <option value="Derecho">Miembro Superior Derecho</option>
-            <option value="Izquierdo">Miembro Superior Izquierdo</option>
-            <option value="Bilateral">Bilateral</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Articulación Diana</label>
-          <select id="patArticulacion">
-            <option value="Codo">Codo</option>
-            <option value="Hombro">Hombro</option>
-            <option value="Muñeca">Muñeca</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Nota / Observación Clínica</label>
-        <textarea id="patNota" rows="2">Paciente con limitación para la flexión completa de codo derecho a los 45 días post-trauma.</textarea>
-      </div>
-
-      <h3 style="margin-top: 15px;">3. Programación de Rango de Fechas de Terapia (Calendario)</h3>
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Rango de Fechas Asignado</label>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div>
-              <label style="font-size:0.75rem;">Fecha Inicio</label>
-              <input type="date" id="rxFechaInicio" value="2026-10-08">
-            </div>
-            <div>
-              <label style="font-size:0.75rem;">Fecha Fin</label>
-              <input type="date" id="rxFechaFin" value="2026-10-16">
-            </div>
+        <div class="grid-3">
+          <div class="form-group">
+            <label>Fecha de Nacimiento</label>
+            <input type="date" id="patNacimiento" onchange="calcularEdadAutomatica()">
+            <span id="edadCalculadaDisplay" class="calc-edad"></span>
+          </div>
+          <div class="form-group">
+            <label>Género</label>
+            <select id="patGenero">
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nivel de Dolor Basal (EVA 0-10)</label>
+            <input type="number" id="patEva" min="0" max="10" placeholder="0 a 10">
           </div>
         </div>
-        <div class="form-group">
-          <label>Rutina / Tipo de Terapia</label>
-          <select id="rxRutina" onchange="actualizarModeloTerapia()">
-            <option value="RX_FLEXOEXT_CODO" data-model="terapia.1.fbx">Flexo-extensión Activa/Asistida de Codo (terapia.1.fbx)</option>
-            <option value="RX_ABDUCCION_HOMBRO" data-model="terapia.1.fbx">Abducción de Hombro en Plano Coronal (terapia.1.fbx)</option>
-            <option value="RX_ROTACION_EXT_INT" data-model="terapia.1.fbx">Rotación / Movilidad en Eje (terapia.1.fbx)</option>
-            <option value="RX_MOV_LIBRE_CONTROL" data-model="terapia.1.fbx">Rango Libre Guiado por IA (ROM Max) (terapia.1.fbx)</option>
-          </select>
-          <small id="modelNameDisplay" style="color:#00d26a; display:block; margin-top:4px; font-family:monospace;">Archivo 3D vinculado: terapia.1.fbx</small>
+      </div>
+
+      <div class="section-card">
+        <h3>2. Anamnesis y Segmento Comprometido</h3>
+        <div class="grid-3">
+          <div class="form-group">
+            <label>Patología / Condición de Base</label>
+            <select id="patPatologia">
+              <option value="RIGIDEZ_POSTRAUMA">Rigidez articular post-trauma / fractura</option>
+              <option value="ACV_HEMI_SUBAGUDA">Hemiparesia post-ACV (Fase subaguda)</option>
+              <option value="TENDINOPATIA_HOMBRO">Tendinopatía / Limitación manguito rotador</option>
+              <option value="POSTOP_CODO">Postoperatorio de codo (control ROM)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lado Afectado</label>
+            <select id="patLado">
+              <option value="Derecho">Miembro Superior Derecho</option>
+              <option value="Izquierdo">Miembro Superior Izquierdo</option>
+              <option value="Bilateral">Bilateral</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Articulación Diana</label>
+            <select id="patArticulacion">
+              <option value="Codo">Codo</option>
+              <option value="Hombro">Hombro</option>
+              <option value="Muñeca">Muñeca</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Nota / Observación Clínica</label>
+          <textarea id="patNota" rows="2" placeholder="Describa los hallazgos clínicos, limitaciones articulares y objetivos terapéuticos..."></textarea>
         </div>
       </div>
 
-      <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button style="flex: 2;" onclick="guardarPacienteEnBaseDatos()">💾 Guardar / Actualizar Paciente en Base de Datos</button>
-        <button style="flex: 1;" class="btn-secondary" onclick="limpiarFormulario()">🔄 Nuevo Registro</button>
+      <div class="section-card">
+        <h3>3. Programación de Rango de Fechas de Terapia (Calendario)</h3>
+        <div class="grid-2">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Rango de Fechas Asignado</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div>
+                <label style="font-size:0.75rem;">Fecha Inicio</label>
+                <input type="date" id="rxFechaInicio">
+              </div>
+              <div>
+                <label style="font-size:0.75rem;">Fecha Fin</label>
+                <input type="date" id="rxFechaFin">
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Rutina / Tipo de Terapia</label>
+            <select id="rxRutina" onchange="actualizarModeloTerapia()">
+              <option value="RX_FLEXOEXT_CODO" data-model="terapia.1.fbx">Flexo-extensión Activa/Asistida de Codo (terapia.1.fbx)</option>
+              <option value="RX_ABDUCCION_HOMBRO" data-model="terapia.1.fbx">Abducción de Hombro en Plano Coronal (terapia.1.fbx)</option>
+              <option value="RX_ROTACION_EXT_INT" data-model="terapia.1.fbx">Rotación / Movilidad en Eje (terapia.1.fbx)</option>
+              <option value="RX_MOV_LIBRE_CONTROL" data-model="terapia.1.fbx">Rango Libre Guiado por IA (ROM Max) (terapia.1.fbx)</option>
+            </select>
+            <small id="modelNameDisplay" style="color:var(--secondary); font-weight:600; display:block; margin-top:6px; font-family:monospace;">Archivo 3D vinculado: terapia.1.fbx</small>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; margin-top: 16px;">
+        <button style="flex: 2; padding: 12px;" onclick="guardarPacienteEnBaseDatos()">💾 Guardar / Actualizar Paciente en Base de Datos</button>
+        <button style="flex: 1; padding: 12px;" class="btn-secondary" onclick="limpiarFormulario()">🔄 Nuevo Registro</button>
       </div>
       <div id="authBanner" class="auth-banner auth-active">✅ Paciente guardado y sincronizado con el servidor.</div>
     </div>
 
     <!-- PESTAÑA 2: LISTA PACIENTES -->
     <div id="tab-lista" class="tab-content">
-      <h3>Pacientes Registrados en Sistema de Telerehabilitación</h3>
-      <table class="patients-table">
-        <thead>
-          <tr>
-            <th>Cédula (User / Pass)</th>
-            <th>Paciente</th>
-            <th>Patología / Lado</th>
-            <th>Ventana / Rango Fechas</th>
-            <th>Modelo 3D</th>
-            <th>Historia clínica</th>
-            <th>En Vivo</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="tablaPacientesBody"></tbody>
-      </table>
+      <div class="section-card">
+        <h3>Pacientes Registrados en Sistema de Telerehabilitación</h3>
+        <div style="overflow-x:auto;">
+          <table class="patients-table">
+            <thead>
+              <tr>
+                <th>Cédula (User / Pass)</th>
+                <th>Paciente</th>
+                <th>Patología / Lado</th>
+                <th>Ventana / Rango Fechas</th>
+                <th>Modelo 3D</th>
+                <th>Historia clínica</th>
+                <th>En Vivo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaPacientesBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- MODAL DE HISTORIAL -->
+  <!-- MODAL DE HISTORIAL CLÍNICO -->
   <div id="historialClinicoModal">
     <div class="history-container">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 15px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 18px; flex-wrap:wrap; gap:12px;">
         <div>
           <span class="status-badge">HISTORIA CLÍNICA DE MONITOREO</span>
           <h2 id="historialModalTitle" style="margin-top:6px;">Historial Clínico del Paciente</h2>
         </div>
         <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn-info" onclick="exportarCsvVitales()">⬇ Descargar CSV</button>
+          <button class="btn-warning" onclick="abrirModalEditarPaciente()">✏️ Editar paciente y terapias</button>
+          <button class="btn-info" onclick="exportarCsvVitales()">⬇ Exportar a Excel (CSV)</button>
           <button class="btn-info" onclick="window.print()">🖨 Imprimir / PDF</button>
           <button class="btn-secondary" onclick="cerrarModalHistorial()">✕ Cerrar Ventana</button>
         </div>
       </div>
 
-      <div id="historiaClinicaCard" style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Datos del paciente y anamnesis</h3>
-        <div id="historiaClinicaGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px 18px; margin-top:10px; font-size:0.85rem;"></div>
+      <!-- PESTAÑAS INTERNAS DE HISTORIA CLÍNICA (Separación de Datos Entrantes en Bruto) -->
+      <div class="history-subtabs no-print">
+        <button type="button" class="history-subtab-btn active" onclick="cambiarSubvistaHistorial('subview-resumen-clinico', this)">📊 Historia Clínica, KPIs y Gráficas</button>
+        <button type="button" class="history-subtab-btn" onclick="cambiarSubvistaHistorial('subview-datos-bruto', this)">📡 Datos Entrantes en Bruto (Tiempo Real)</button>
       </div>
 
-      <div class="kpi-cards">
-        <div class="kpi-card"><div class="lbl">Terapias realizadas</div><div class="val" id="kpiTotalSesiones">0</div></div>
-        <div class="kpi-card"><div class="lbl">Repeticiones totales</div><div class="val" id="kpiMinutosTotales">0</div></div>
-        <div class="kpi-card"><div class="lbl">Lecturas registradas</div><div class="val" id="kpiPrecisionGlobal">0</div></div>
-        <div class="kpi-card"><div class="lbl">Último dato recibido</div><div class="val" id="kpiRatioEjecucion" style="font-size:1rem;">—</div></div>
-      </div>
+      <!-- SUBVISTA 1: HISTORIA CLÍNICA Y TODAS LAS GRÁFICAS SIEMPRE VISIBLES -->
+      <div id="subview-resumen-clinico" class="history-subview active">
+        <div id="historiaClinicaCard" class="section-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h3 style="margin:0;">Datos del paciente y anamnesis</h3>
+          </div>
+          <div id="historiaClinicaGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px 20px; margin-top:10px; font-size:0.86rem;"></div>
+        </div>
 
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Resumen de monitoreo (signos vitales y ángulos)</h3>
-        <div style="overflow-x:auto;">
-          <table class="patients-table" style="margin-top:5px;">
-            <thead>
-              <tr><th>Parámetro</th><th>Última lectura</th><th>Promedio</th><th>Mínimo</th><th>Máximo</th><th>Lecturas</th></tr>
-            </thead>
-            <tbody id="tablaResumenVitales"></tbody>
-          </table>
+        <div class="kpi-cards">
+          <div class="kpi-card"><div class="lbl">Terapias realizadas</div><div class="val" id="kpiTotalSesiones">0</div></div>
+          <div class="kpi-card"><div class="lbl">Repeticiones totales</div><div class="val" id="kpiMinutosTotales">0</div></div>
+          <div class="kpi-card"><div class="lbl">Lecturas registradas</div><div class="val" id="kpiPrecisionGlobal">0</div></div>
+          <div class="kpi-card"><div class="lbl">Último dato recibido</div><div class="val" id="kpiRatioEjecucion" style="font-size:1.05rem;">—</div></div>
+        </div>
+
+        <!-- TODAS LAS GRÁFICAS SIEMPRE VISIBLES CON KPI SUPERIOR Y FLECHA DE TENDENCIA -->
+        <div class="section-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <h3 style="margin:0;">Evolución Clínica en el Tiempo (Signos Vitales y Rangos Articulares)</h3>
+            <span style="font-size:0.76rem; color:var(--text-muted);">Comparación automática entre última lectura y lectura previa</span>
+          </div>
+          <div id="todasLasGraficasContainer" class="charts-grid"></div>
+        </div>
+
+        <div class="section-card">
+          <h3>Resumen estadístico de monitoreo (signos vitales y ángulos)</h3>
+          <div style="overflow-x:auto;">
+            <table class="patients-table" style="margin-top:5px;">
+              <thead>
+                <tr><th>Parámetro</th><th>Última lectura</th><th>Promedio</th><th>Mínimo</th><th>Máximo</th><th>Lecturas</th></tr>
+              </thead>
+              <tbody id="tablaResumenVitales"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <h3>Bitácora de sesiones realizadas</h3>
+          <p id="diagnosticoEvolucionRom" style="font-size:0.86rem; color:var(--text-main); line-height:1.5; margin:4px 0 10px; font-weight:500;"></p>
+          <div style="overflow-x:auto;">
+            <table class="patients-table" style="margin-top:5px;">
+              <thead>
+                <tr>
+                  <th>Sesión / Fecha</th><th>Día</th><th>Repeticiones</th>
+                  <th>FC prom.</th><th>FR prom.</th><th>SpO₂ prom.</th><th>Temp prom.</th><th>Lecturas</th>
+                </tr>
+              </thead>
+              <tbody id="tablaSesionesDetalle"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="section-card">
+            <h3>Eventos clínicos (solicitudes de ayuda)</h3>
+            <div id="listaEventos" style="font-size:0.85rem; max-height:220px; overflow-y:auto;"></div>
+          </div>
+
+          <div class="section-card">
+            <h3>📝 Apuntes y evolución médica</h3>
+            <div id="listaApuntes" style="margin:8px 0 12px; max-height:180px; overflow-y:auto; font-size:0.85rem;"></div>
+            <textarea id="apunteHistorial" rows="3" placeholder="Escribe un nuevo apunte clínico..."></textarea>
+            <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
+              <button class="btn-call" onclick="guardarApunteHistorial()">💾 Guardar apunte</button>
+              <span id="apunteHistorialEstado" style="font-size:0.78rem; color:var(--success); font-weight:600;"></span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <div class="no-print" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-          <h3 style="margin:0;">Evolución en el tiempo</h3>
-          <select id="selGrafica" style="width:auto;" onchange="renderGrafica()">
-            <option value="pulso">Frecuencia cardíaca (lpm)</option>
-            <option value="respiracion">Frecuencia respiratoria (rpm)</option>
-            <option value="saturacion">Saturación de oxígeno (%)</option>
-            <option value="temperatura">Temperatura (°C)</option>
-            <option value="hombro">Ángulo hombro (°)</option>
-            <option value="codo">Ángulo codo (°)</option>
-            <option value="cadera">Ángulo cadera (°)</option>
-          </select>
-        </div>
-        <div id="graficaVitales" style="width:100%; overflow-x:auto;"></div>
-      </div>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Registro de signos vitales y seguimiento <span style="font-size:0.7rem; color:#a0a0c0; font-weight:normal;">(más recientes primero)</span></h3>
-        <div style="overflow-x:auto; max-height:420px; overflow-y:auto;">
-          <table class="patients-table" style="margin-top:5px;">
-            <thead>
-              <tr>
-                <th>Fecha y hora</th><th>FC (lpm)</th><th>FR (rpm)</th><th>SpO₂ (%)</th><th>Temp (°C)</th>
-                <th>Hombro</th><th>Codo</th><th>Cadera</th><th>Estado</th><th>Día</th><th>Rep.</th><th>Origen</th>
-              </tr>
-            </thead>
-            <tbody id="tablaVitales"></tbody>
-          </table>
-        </div>
-        <button id="btnMasVitales" class="btn-secondary no-print" style="margin-top:8px; display:none;" onclick="vitalesVisibles += 200; renderTablaVitales();">Mostrar más registros</button>
-      </div>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Bitácora de sesiones realizadas</h3>
-        <p id="diagnosticoEvolucionRom" style="font-size:0.85rem; color:#fff; line-height:1.5; margin:4px 0 8px;"></p>
-        <div style="overflow-x:auto;">
-          <table class="patients-table" style="margin-top:5px;">
-            <thead>
-              <tr>
-                <th>Sesión / Fecha</th><th>Día</th><th>Repeticiones</th>
-                <th>FC prom.</th><th>FR prom.</th><th>SpO₂ prom.</th><th>Temp prom.</th><th>Lecturas</th>
-              </tr>
-            </thead>
-            <tbody id="tablaSesionesDetalle"></tbody>
-          </table>
+      <!-- SUBVISTA 2: DATOS ENTRANTES EN BRUTO Y EXPORTACIÓN A EXCEL -->
+      <div id="subview-datos-bruto" class="history-subview">
+        <div class="section-card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+            <div>
+              <h3 style="margin:0;">Registro de Datos Entrantes en Bruto (Telemetría y Sensores)</h3>
+              <p style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">Flujo cronológico de lecturas recibidas desde el equipo del paciente (más recientes primero).</p>
+            </div>
+            <button class="btn-call no-print" onclick="exportarCsvVitales()">📊 Exportar Datos a Excel (CSV)</button>
+          </div>
+          <div style="overflow-x:auto; max-height:540px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <table class="patients-table" style="margin-top:0;">
+              <thead>
+                <tr>
+                  <th>Fecha y hora</th><th>FC (lpm)</th><th>FR (rpm)</th><th>SpO₂ (%)</th><th>Temp (°C)</th>
+                  <th>Hombro</th><th>Codo</th><th>Cadera</th><th>Estado</th><th>Día</th><th>Rep.</th><th>Origen</th>
+                </tr>
+              </thead>
+              <tbody id="tablaVitales"></tbody>
+            </table>
+          </div>
+          <button id="btnMasVitales" class="btn-secondary no-print" style="margin-top:10px; display:none;" onclick="vitalesVisibles += 200; renderTablaVitales();">Mostrar más registros</button>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-bottom:20px;">
-        <h3>Eventos clínicos (solicitudes de ayuda)</h3>
-        <div id="listaEventos" style="font-size:0.85rem; max-height:200px; overflow-y:auto;"></div>
-      </div>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
-        <h3>🗓️ Terapias programadas <span id="terapiasResumenMedico" style="font-size:0.75rem; color:#a0a0c0; font-weight:normal;"></span></h3>
-        <div style="font-size:0.75rem; color:#a0a0c0; margin-top:4px;">Cada terapia se habilita sola en su fecha. Aquí puedes cambiar la fecha, habilitarla, bloquearla o reabrirla para que el paciente la repita.</div>
-        <div id="listaTerapias" style="margin-top:10px; max-height:260px; overflow-y:auto; font-size:0.85rem;"></div>
-      </div>
-
-      <div style="background:#1a1a2e; border:1px solid #303050; border-radius:8px; padding:16px; margin-top:20px;">
-        <h3>📝 Apuntes del médico</h3>
-        <div id="listaApuntes" style="margin:10px 0; max-height:200px; overflow-y:auto; font-size:0.85rem;"></div>
-        <textarea id="apunteHistorial" rows="3" placeholder="Escribe un nuevo apunte clínico..."></textarea>
-        <div style="margin-top:8px; display:flex; gap:10px; align-items:center;">
-          <button class="btn-call" onclick="guardarApunteHistorial()">💾 Guardar apunte</button>
-          <span id="apunteHistorialEstado" style="font-size:0.75rem; color:#00d26a;"></span>
+  <!-- MODAL: EDITAR INFORMACIÓN DEL PACIENTE Y HABILITAR TERAPIAS -->
+  <div id="editarPacienteModal" class="modal-backdrop" style="z-index: 1300;">
+    <div class="modal-box-md">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:18px;">
+        <div>
+          <span class="status-badge">EDICIÓN DE FICHA Y PROGRAMACIÓN</span>
+          <h2 id="editModalTitle" style="margin-top:6px; font-size:1.2rem;">Editar Información del Paciente</h2>
         </div>
+        <button type="button" class="btn-secondary" style="padding:6px 12px;" onclick="cerrarModalEditarPaciente()">✕ Cerrar</button>
+      </div>
+
+      <div class="section-card">
+        <h3>Datos Personales y Clínicos</h3>
+        <div class="grid-3">
+          <div class="form-group"><label>Nombres</label><input type="text" id="editPatNombre"></div>
+          <div class="form-group"><label>Apellidos</label><input type="text" id="editPatApellido"></div>
+          <div class="form-group"><label>Cédula / ID</label><input type="text" id="editPatDoc" readonly style="background:#1e293b; color:#94a3b8; cursor:not-allowed;"></div>
+        </div>
+        <div class="grid-3">
+          <div class="form-group"><label>Fecha de Nacimiento</label><input type="date" id="editPatNacimiento"></div>
+          <div class="form-group">
+            <label>Género</label>
+            <select id="editPatGenero">
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Dolor Basal (EVA 0-10)</label><input type="number" id="editPatEva" min="0" max="10"></div>
+        </div>
+        <div class="grid-3">
+          <div class="form-group">
+            <label>Patología</label>
+            <select id="editPatPatologia">
+              <option value="RIGIDEZ_POSTRAUMA">Rigidez articular post-trauma / fractura</option>
+              <option value="ACV_HEMI_SUBAGUDA">Hemiparesia post-ACV (Fase subaguda)</option>
+              <option value="TENDINOPATIA_HOMBRO">Tendinopatía / Limitación manguito rotador</option>
+              <option value="POSTOP_CODO">Postoperatorio de codo (control ROM)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lado Afectado</label>
+            <select id="editPatLado">
+              <option value="Derecho">Miembro Superior Derecho</option>
+              <option value="Izquierdo">Miembro Superior Izquierdo</option>
+              <option value="Bilateral">Bilateral</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Articulación Diana</label>
+            <select id="editPatArticulacion">
+              <option value="Codo">Codo</option>
+              <option value="Hombro">Hombro</option>
+              <option value="Muñeca">Muñeca</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-3">
+          <div class="form-group"><label>Fecha Inicio Terapia</label><input type="date" id="editRxFechaInicio"></div>
+          <div class="form-group"><label>Fecha Fin Terapia</label><input type="date" id="editRxFechaFin"></div>
+          <div class="form-group">
+            <label>Rutina Asignada</label>
+            <select id="editRxRutina">
+              <option value="RX_FLEXOEXT_CODO" data-model="terapia.1.fbx">Flexo-extensión de Codo</option>
+              <option value="RX_ABDUCCION_HOMBRO" data-model="terapia.1.fbx">Abducción de Hombro</option>
+              <option value="RX_ROTACION_EXT_INT" data-model="terapia.1.fbx">Rotación / Movilidad en Eje</option>
+              <option value="RX_MOV_LIBRE_CONTROL" data-model="terapia.1.fbx">Rango Libre Guiado por IA</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Nota / Observación Clínica</label>
+          <textarea id="editPatNota" rows="2"></textarea>
+        </div>
+        <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" onclick="guardarEdicionPaciente()">💾 Guardar Cambios del Paciente</button>
+        </div>
+      </div>
+
+      <!-- SECCIÓN DE HABILITAR TERAPIAS REUBICADA AQUÍ -->
+      <div class="section-card" style="margin-bottom:0;">
+        <h3>🗓️ Habilitar y Gestionar Terapias Programadas <span id="terapiasResumenMedico" style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;"></span></h3>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">
+          Activa el interruptor para habilitar o bloquear manualmente cada sesión, ajusta su fecha programada o reabre una terapia completada.
+        </div>
+        <div id="listaTerapias" style="max-height:280px; overflow-y:auto; font-size:0.85rem;"></div>
       </div>
     </div>
   </div>
 
   <!-- MODAL DE VIDEOCONFERENCIA -->
   <div id="liveCallModal">
-    <div class="call-container" style="max-width:1100px; max-height:calc(100vh - 50px); overflow-y:auto;">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #303050; padding-bottom: 12px;">
+    <div class="call-container">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; flex-wrap:wrap; gap:10px;">
         <div>
-          <span class="status-badge" style="background:rgba(0,210,106,0.3);">CONEXIÓN DIRECTA EN VIVO UAC</span>
-          <h3 id="callPatientTitle" style="margin-top:6px; color:#fff;">Paciente: En vivo</h3>
+          <span class="status-badge">CONEXIÓN DIRECTA EN VIVO UAC</span>
+          <h3 id="callPatientTitle" style="margin-top:6px; color:var(--text-main); text-transform:none; font-size:1.05rem;">Paciente: En vivo</h3>
         </div>
-        <div style="display:flex; gap:10px;">
-          <button id="btnToggleMedicoCam" class="btn-call" onclick="alternarVistaMedicoEnVivo()">👨‍⚕️ Activar/Ocultar Cámara Médico</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="btnToggleMedicoCam" class="btn-call" onclick="alternarVistaMedicoEnVivo()">📹 Apagar Cámara Médico</button>
+          <button id="btnToggleMedicoMic" class="btn-call" onclick="alternarMicrofonoMedicoEnVivo()">🎙️ Silenciar Micrófono</button>
           <button class="btn-danger" onclick="cerrarSesionEnVivo()">❌ Finalizar Conexión</button>
         </div>
       </div>
 
-      <div id="liveMetricsBar" style="display:flex; gap:18px; flex-wrap:wrap; font-family:monospace; font-size:0.8rem; color:#a0a0c0; padding:8px 2px;">
-        <span>Hombro: <b id="mHombro" style="color:#00d26a;">--</b></span>
-        <span>Codo: <b id="mCodo" style="color:#00d26a;">--</b></span>
-        <span>Cadera: <b id="mCadera" style="color:#00d26a;">--</b></span>
-        <span>Repeticiones: <b id="mRep" style="color:#00d26a;">0</b></span>
-        <span>FC: <b id="mPulso" style="color:#00d26a;">--</b></span>
-        <span>Resp: <b id="mResp" style="color:#00d26a;">--</b></span>
-        <span>SpO₂: <b id="mSpO2" style="color:#00d26a;">--</b></span>
-        <span>Temp: <b id="mTemp" style="color:#00d26a;">--</b></span>
-        <span>Terapia: <b id="mEstadoTerapia" style="color:#ffd700;">--</b></span>
-        <span id="mEstadoLlamada" style="color:#ffd700;">Sin llamada</span>
+      <div id="liveMetricsBar" style="display:flex; gap:16px; flex-wrap:wrap; font-family:'Consolas', monospace; font-size:0.82rem; color:var(--text-muted); background:var(--bg-subtle); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px;">
+        <span>Hombro: <b id="mHombro" style="color:var(--primary);">--</b></span>
+        <span>Codo: <b id="mCodo" style="color:var(--primary);">--</b></span>
+        <span>Cadera: <b id="mCadera" style="color:var(--primary);">--</b></span>
+        <span>Repeticiones: <b id="mRep" style="color:var(--success);">0</b></span>
+        <span>FC: <b id="mPulso" style="color:var(--primary);">--</b></span>
+        <span>Resp: <b id="mResp" style="color:var(--primary);">--</b></span>
+        <span>SpO₂: <b id="mSpO2" style="color:var(--primary);">--</b></span>
+        <span>Temp: <b id="mTemp" style="color:var(--primary);">--</b></span>
+        <span>Terapia: <b id="mEstadoTerapia" style="color:var(--warning);">--</b></span>
+        <span id="mEstadoLlamada" style="color:var(--secondary); font-weight:700;">Sin llamada</span>
       </div>
 
       <div id="liveControlBar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <span style="font-size:0.75rem; color:#a0a0c0;">Control de la terapia del paciente:</span>
+        <span style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">Control de la terapia del paciente:</span>
         <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('iniciar')">▶ Iniciar</button>
         <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('pausar')">⏸ Pausar</button>
         <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('continuar')">⏯ Continuar</button>
@@ -415,50 +1074,43 @@
         <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('finalizar')">⏹ Finalizar</button>
       </div>
 
+      <!-- SECCIÓN DE MONITOREO EN VIVO (SIN RECUADRO DE CÁMARA DEL PACIENTE) -->
       <div class="call-stages" id="callStagesGrid">
-        <div class="call-box" style="position:relative;">
-          <span class="mode-tag">CÁMARA DEL PACIENTE</span>
-          <video id="patientLiveFeedVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:block;"></video>
-          <div id="patientFeedPlaceholder" style="position:absolute; inset:0; background:#0b0b14; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#00d26a; font-family:monospace;">
-            <div style="font-size:3rem;">👤</div>
-            <p style="margin-top:8px;">Esperando flujo del paciente...</p>
-          </div>
-        </div>
-
         <div class="call-box" id="espejoBox" style="position:relative; overflow:hidden; background:#000;">
           <span class="mode-tag" style="z-index:6;">PANTALLA DEL PACIENTE (EN VIVO)</span>
-          <button onclick="pantallaCompletaEspejo('espejoBox')" style="position:absolute; top:8px; right:8px; z-index:6; background:rgba(0,0,0,0.7); color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:4px 10px; font-size:0.75rem;">⛶ Pantalla completa</button>
+          <button onclick="pantallaCompletaEspejo('espejoBox')" style="position:absolute; top:10px; right:10px; z-index:6; background:rgba(15,23,42,0.85); color:#fff; border:1px solid rgba(255,255,255,0.3); border-radius:4px; padding:4px 10px; font-size:0.75rem;">⛶ Pantalla completa</button>
           <iframe id="espejoFrame" title="Pantalla del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
         </div>
 
-        <div class="call-box" style="position:relative;">
+        <div class="call-box" id="doctorStageBox" style="position:relative;">
           <span class="mode-tag">CÁMARA / RETORNO MÉDICO</span>
           <video id="doctorLiveVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; border-radius:6px; display:none;"></video>
-          <div id="doctorCallOverlay" style="color:#a0a0c0; font-size:0.85rem; padding:20px; text-align:center;">
-            <p>Cámara médica inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>
+          <div id="doctorCallOverlay" style="color:#cbd5e1; font-size:0.85rem; padding:20px; text-align:center;">
+            <p>Cámara médica inactiva.<br>Haz clic en <strong>"Encender Cámara Médico"</strong>.</p>
           </div>
         </div>
       </div>
 
-      <div style="background:#0b0b14; border:1px solid #303050; border-radius:8px; padding:10px;">
-        <label style="font-size:0.75rem; color:#a0a0c0;">📝 Apunte clínico (se guarda en la historia clínica del paciente)</label>
+      <div style="background:var(--bg-subtle); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px;">
+        <label style="font-size:0.78rem; color:var(--text-muted);">📝 Apunte clínico (se guarda en la historia clínica del paciente)</label>
         <textarea id="apunteEnVivo" rows="2" placeholder="Escribe aquí tu observación..."></textarea>
-        <div style="display:flex; gap:8px; margin-top:6px; align-items:center; flex-wrap:wrap;">
+        <div style="display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn-call" style="padding:6px 12px; font-size:0.8rem;" onclick="guardarApunteEnVivo()">💾 Guardar apunte</button>
           <button class="btn-info" style="padding:6px 12px; font-size:0.8rem;" onclick="abrirHistorialDesdeLlamada()">📊 Ver historia clínica</button>
-          <span id="apunteEstado" style="font-size:0.75rem; color:#00d26a;"></span>
+          <span id="apunteEstado" style="font-size:0.78rem; color:var(--success); font-weight:600;"></span>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- MODAL OBSERVAR EN SILENCIO -->
   <div id="observarModal" style="display:none; position:fixed; inset:0; background:#05050a; z-index:1500; flex-direction:column;">
-    <div style="display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0f0f1b; border-bottom:1px solid #303050;">
-      <span id="observarTitulo" style="font-weight:bold; color:#00d26a;">Observando</span>
-      <span id="observarEstado" style="font-size:0.8rem; color:#ffd700;"></span>
+    <div style="display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0f172a; border-bottom:1px solid #334155;">
+      <span id="observarTitulo" style="font-weight:bold; color:#38bdf8;">Observando</span>
+      <span id="observarEstado" style="font-size:0.8rem; color:#fbbf24;"></span>
       <span style="flex:1;"></span>
-      <button onclick="pantallaCompletaEspejo('observarBox')" style="background:transparent; color:#00d26a; border:1px solid #00d26a; border-radius:4px; padding:6px 12px; font-size:0.8rem;">⛶ Pantalla completa</button>
-      <button onclick="cerrarObservacion()" style="background:transparent; color:#ff4d4d; border:1px solid #ff4d4d; border-radius:4px; padding:6px 12px; font-size:0.8rem;">✖ Cerrar</button>
+      <button onclick="pantallaCompletaEspejo('observarBox')" style="background:transparent; color:#38bdf8; border:1px solid #38bdf8; border-radius:4px; padding:6px 12px; font-size:0.8rem;">⛶ Pantalla completa</button>
+      <button onclick="cerrarObservacion()" style="background:transparent; color:#f87171; border:1px solid #f87171; border-radius:4px; padding:6px 12px; font-size:0.8rem;">✖ Cerrar</button>
     </div>
     <div id="observarBox" style="position:relative; flex:1; overflow:hidden; background:#000;">
       <iframe id="observarFrame" title="Observación del paciente" style="position:absolute; top:0; left:0; width:1280px; height:720px; border:0; transform-origin:0 0;"></iframe>
@@ -514,6 +1166,7 @@
       return r;
     }
 
+
     window.addEventListener('DOMContentLoaded', () => {
       calcularEdadAutomatica();
       actualizarModeloTerapia();
@@ -522,6 +1175,111 @@
         entrarAlPanel().catch(() => cerrarSesionMedico(true));
       }
     });
+
+    /* ---------- Registro y Recuperación de Contraseña ---------- */
+    function abrirModalRegistroMedico() {
+      document.getElementById('registroMedicoFeedback').style.display = 'none';
+      document.getElementById('registroMedicoModal').style.display = 'flex';
+    }
+
+    function cerrarModalRegistroMedico() {
+      document.getElementById('registroMedicoModal').style.display = 'none';
+    }
+
+    async function registrarNuevoMedico() {
+      const nombre = document.getElementById('regMedNombre').value.trim();
+      const email = document.getElementById('regMedEmail').value.trim();
+      const especialidad = document.getElementById('regMedEspecialidad').value.trim();
+      const user = document.getElementById('regMedUser').value.trim();
+      const pin = document.getElementById('regMedPin').value.trim();
+      const pinConfirm = document.getElementById('regMedPinConfirm').value.trim();
+      const fb = document.getElementById('registroMedicoFeedback');
+
+      if (!nombre || !email || !user || !pin) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Por favor completa todos los campos obligatorios.';
+        return;
+      }
+      if (pin !== pinConfirm) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Las contraseñas no coinciden.';
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/medico/registro', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, email, especialidad, user, pin })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          fb.className = 'auth-banner';
+          fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+          fb.innerText = data.error || 'No se pudo completar el registro en el servidor.';
+          return;
+        }
+        fb.className = 'auth-banner auth-active';
+        fb.style.cssText = 'display:block;';
+        fb.innerText = '✅ Cuenta médica creada exitosamente. Ya puedes iniciar sesión.';
+        document.getElementById('medUser').value = user;
+        setTimeout(() => cerrarModalRegistroMedico(), 1600);
+      } catch (err) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Error de conexión con el servidor al registrar.';
+      }
+    }
+
+    function abrirModalRecuperarClave() {
+      document.getElementById('recuperarClaveFeedback').style.display = 'none';
+      document.getElementById('recEmail').value = '';
+      document.getElementById('recuperarClaveModal').style.display = 'flex';
+    }
+
+    function cerrarModalRecuperarClave() {
+      document.getElementById('recuperarClaveModal').style.display = 'none';
+    }
+
+    async function enviarRecuperacionClave() {
+      const email = document.getElementById('recEmail').value.trim();
+      const fb = document.getElementById('recuperarClaveFeedback');
+
+      if (!email || !email.includes('@')) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Ingresa un correo electrónico válido.';
+        return;
+      }
+
+      fb.className = 'auth-banner auth-info-banner';
+      fb.style.cssText = 'display:block;';
+      fb.innerText = 'Procesando solicitud de recuperación...';
+
+      try {
+        const r = await fetch('/api/medico/recuperar-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          fb.className = 'auth-banner';
+          fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+          fb.innerText = data.error || 'No se encontró una cuenta asociada a ese correo.';
+          return;
+        }
+        fb.className = 'auth-banner auth-active';
+        fb.style.cssText = 'display:block;';
+        fb.innerText = data.mensaje || ('✅ Se ha enviado un enlace/código de restablecimiento a ' + email + '. Revisa tu bandeja de entrada.');
+      } catch (err) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'No se pudo conectar con el servicio de correo del servidor.';
+      }
+    }
 
     /* Pide al servidor la lista de servidores STUN/TURN */
     async function cargarConfiguracionIce() {
@@ -543,10 +1301,6 @@
     function mostrarEstadoPaciente(texto) {
       const estado = document.getElementById('mEstadoLlamada');
       if (estado) estado.innerText = texto;
-      const p = document.querySelector('#patientFeedPlaceholder p');
-      if (p) p.innerText = texto;
-      const ph = document.getElementById('patientFeedPlaceholder');
-      if (ph && !(streamPaciente && streamPaciente.getVideoTracks().length)) ph.style.display = 'flex';
     }
 
     function iniciarConexiónSocketMedico() {
@@ -554,7 +1308,8 @@
 
       if (typeof io === 'undefined') {
         estadoSrv.innerText = "SERVIDOR: NO DISPONIBLE (abre esta página desde la dirección del servidor Node)";
-        estadoSrv.style.color = "#ff4d4d";
+        estadoSrv.style.color = "var(--danger)";
+        estadoSrv.style.background = "var(--danger-bg)";
         return;
       }
 
@@ -563,13 +1318,16 @@
 
       socket.on('connect', () => {
         estadoSrv.innerText = "SERVIDOR: CONECTADO (SOCKET.IO ACTIVO)";
-        estadoSrv.style.color = "#00d26a";
+        estadoSrv.style.color = "var(--success)";
+        estadoSrv.style.background = "var(--success-bg)";
+        estadoSrv.style.borderColor = "var(--success)";
         socket.emit('doctor:join');
       });
 
       socket.on('disconnect', () => {
         estadoSrv.innerText = "SERVIDOR: DESCONECTADO";
-        estadoSrv.style.color = "#ff4d4d";
+        estadoSrv.style.color = "var(--danger)";
+        estadoSrv.style.background = "var(--danger-bg)";
       });
 
       // Lista de pacientes ya conectados al entrar el médico
@@ -756,8 +1514,6 @@
       streamPaciente = null;
       streamAvatarPaciente = null;
       trAvatar = null;
-      const v = document.getElementById('patientLiveFeedVideo');
-      if (v) v.srcObject = null;
       const va = document.getElementById('patientAvatarVideo');
       if (va) va.srcObject = null;
       const pa = document.getElementById('avatarFeedPlaceholder');
@@ -777,9 +1533,7 @@
       }
     }
 
-    /* El paciente aceptó: el médico crea la oferta WebRTC.
-       Si este equipo no tiene cámara o micrófono, participa en modo
-       "solo recibir": ve y escucha al paciente sin enviar nada. */
+    /* El paciente aceptó: el médico crea la oferta WebRTC. */
     async function iniciarOfertaHaciaPaciente() {
       const cedula = pacienteEnLlamadaActual;
       if (!cedula) return;
@@ -800,24 +1554,20 @@
           if (!yaEnvia) pc.addTransceiver(tipo, { direction: 'recvonly' });
         });
 
-
         pc.ontrack = (event) => {
           if (trAvatar && event.transceiver === trAvatar) {
             if (!streamAvatarPaciente) streamAvatarPaciente = new MediaStream();
             streamAvatarPaciente.addTrack(event.track);
             const va = document.getElementById('patientAvatarVideo');
-            if (va.srcObject !== streamAvatarPaciente) va.srcObject = streamAvatarPaciente;
-            va.play().catch(() => {});
-            document.getElementById('avatarFeedPlaceholder').style.display = 'none';
+            if (va && va.srcObject !== streamAvatarPaciente) va.srcObject = streamAvatarPaciente;
+            if (va) va.play().catch(() => {});
+            const pa = document.getElementById('avatarFeedPlaceholder');
+            if (pa) pa.style.display = 'none';
             return;
           }
           if (!streamPaciente) streamPaciente = new MediaStream();
           streamPaciente.addTrack(event.track);
-          const v = document.getElementById('patientLiveFeedVideo');
-          if (v.srcObject !== streamPaciente) v.srcObject = streamPaciente;
-          v.play().catch(() => {});
           if (event.track.kind === 'video') {
-            document.getElementById('patientFeedPlaceholder').style.display = 'none';
             asignarCamaraEspejo('espejoFrame');
           }
         };
@@ -832,9 +1582,9 @@
           if (peerConnection !== pc) return;
           const s = pc.connectionState;
           if (s === 'connected') document.getElementById('mEstadoLlamada').innerText = 'Videollamada conectada';
-          else if (s === 'connecting') document.getElementById('mEstadoLlamada').innerText = 'Conectando video...';
+          else if (s === 'connecting') document.getElementById('mEstadoLlamada').innerText = 'Conectando transmisión...';
           else if (s === 'disconnected') document.getElementById('mEstadoLlamada').innerText = 'Conexión inestable...';
-          else if (s === 'failed') mostrarEstadoPaciente('Falló la conexión de video. Entre redes distintas puede hacer falta un servidor TURN.');
+          else if (s === 'failed') mostrarEstadoPaciente('Falló la conexión en vivo. Entre redes distintas puede hacer falta un servidor TURN.');
         };
 
         const offer = await pc.createOffer();
@@ -879,7 +1629,10 @@
     function calcularEdadAutomatica() {
       const fechaNac = document.getElementById('patNacimiento').value;
       const display = document.getElementById('edadCalculadaDisplay');
-      if (!fechaNac) return 0;
+      if (!fechaNac) {
+        display.innerText = '';
+        return 0;
+      }
       const birthDate = new Date(fechaNac);
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
@@ -1057,7 +1810,7 @@
       tbody.innerHTML = '';
 
       if (lista.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#a0a0c0; padding:20px;">No hay pacientes registrados.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:24px;">No hay pacientes registrados.</td></tr>`;
         return;
       }
 
@@ -1068,13 +1821,13 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><span class="cred-badge">${p.documento}</span></td>
-          <td>${pacientesEnLinea.has(String(p.documento)) ? '<span style="color:#00d26a;" title="Conectado ahora">● </span>' : ''}${p.nombres} ${p.apellidos}</td>
+          <td>${pacientesEnLinea.has(String(p.documento)) ? '<span style="color:var(--success); font-weight:bold;" title="Conectado ahora">● </span>' : ''}${p.nombres} ${p.apellidos}</td>
           <td>${a.patologia} (${a.lado})</td>
-          <td>${prog.fechaInicio} al ${prog.fechaFin}</td>
-          <td><span style="font-family:monospace; color:#00d26a;">${prog.modelo3D || 'terapia.1.fbx'}</span></td>
-          <td><button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirModalHistorialDiagnostico('${p.documento}')">📋 Historia clínica</button></td>
-          <td><button class="btn-call" style="padding:6px 12px; font-size:0.75rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 En Vivo</button> <button class="btn-info" style="padding:6px 12px; font-size:0.75rem;" onclick="observarPaciente('${p.documento}')">👁 Observar</button></td>
-          <td><button class="btn-danger" style="padding:6px 10px; font-size:0.75rem;" onclick="eliminarPaciente('${p.documento}')">🗑️</button></td>
+          <td>${prog.fechaInicio || '—'} al ${prog.fechaFin || '—'}</td>
+          <td><span style="font-family:monospace; color:var(--secondary); font-weight:600;">${prog.modelo3D || 'terapia.1.fbx'}</span></td>
+          <td><button class="btn-info" style="padding:6px 12px; font-size:0.78rem;" onclick="abrirModalHistorialDiagnostico('${p.documento}')">📋 Historia clínica</button></td>
+          <td><button class="btn-call" style="padding:6px 12px; font-size:0.78rem;" onclick="abrirEntradaTerapiaEnVivo('${p.documento}')">🟢 En Vivo</button> <button class="btn-info" style="padding:6px 12px; font-size:0.78rem;" onclick="observarPaciente('${p.documento}')">👁 Observar</button></td>
+          <td><button class="btn-danger" style="padding:6px 10px; font-size:0.78rem;" onclick="eliminarPaciente('${p.documento}')">🗑️</button></td>
         `;
         tbody.appendChild(tr);
       });
@@ -1151,7 +1904,7 @@
     });
     window.addEventListener('resize', () => Object.keys(espejos).forEach(ajustarEspejo));
 
-    /* ---------- Observación en silencio (sin cámara, sin micrófono, sin llamada) ---------- */
+    /* ---------- Observación en silencio ---------- */
 
     function actualizarEstadoObservacion(cedula) {
       const el = document.getElementById('observarEstado');
@@ -1186,7 +1939,90 @@
       if (e) actualizarEstadoObservacion(e.cedula);
     }, 1000);
 
-    /* ---------- Terapias programadas ---------- */
+    /* ---------- Edición de Paciente y Terapias Programadas ---------- */
+
+    function abrirModalEditarPaciente() {
+      const f = fichaDelHistorial();
+      if (!f) return;
+      const p = f.paciente || {};
+      const a = f.anamnesis || {};
+      const prog = f.programacionMensual || {};
+
+      document.getElementById('editModalTitle').innerText = `Editar: ${p.nombres || ''} ${p.apellidos || ''}`;
+      document.getElementById('editPatNombre').value = p.nombres || '';
+      document.getElementById('editPatApellido').value = p.apellidos || '';
+      document.getElementById('editPatDoc').value = p.documento || '';
+      document.getElementById('editPatNacimiento').value = p.fechaNacimiento || '';
+      document.getElementById('editPatGenero').value = p.genero || 'Masculino';
+      document.getElementById('editPatEva').value = p.dolorEva != null ? p.dolorEva : 0;
+
+      document.getElementById('editPatPatologia').value = a.patologia || 'RIGIDEZ_POSTRAUMA';
+      document.getElementById('editPatLado').value = a.lado || 'Derecho';
+      document.getElementById('editPatArticulacion').value = a.articulacion || 'Codo';
+      document.getElementById('editPatNota').value = a.nota || '';
+
+      document.getElementById('editRxFechaInicio').value = prog.fechaInicio || '';
+      document.getElementById('editRxFechaFin').value = prog.fechaFin || '';
+      document.getElementById('editRxRutina').value = prog.rutinaId || 'RX_FLEXOEXT_CODO';
+
+      renderTerapias(f);
+      document.getElementById('editarPacienteModal').style.display = 'flex';
+    }
+
+    function cerrarModalEditarPaciente() {
+      document.getElementById('editarPacienteModal').style.display = 'none';
+    }
+
+    function guardarEdicionPaciente() {
+      const ced = String(historialCedulaActual);
+      const lista = obtenerBasePacientes();
+      const idx = lista.findIndex(p => String(p.paciente.documento) === ced);
+      if (idx < 0) return;
+
+      const fechaNac = document.getElementById('editPatNacimiento').value;
+      let edadCalc = lista[idx].paciente.edadCalculada || 0;
+      if (fechaNac) {
+        const b = new Date(fechaNac);
+        const today = new Date();
+        edadCalc = today.getFullYear() - b.getFullYear();
+        const m = today.getMonth() - b.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < b.getDate())) edadCalc--;
+      }
+
+      const selRutina = document.getElementById('editRxRutina');
+      const optRutina = selRutina.options[selRutina.selectedIndex];
+      const modelo3D = optRutina ? (optRutina.getAttribute('data-model') || 'terapia.1.fbx') : 'terapia.1.fbx';
+
+      lista[idx].paciente = Object.assign({}, lista[idx].paciente, {
+        nombres: document.getElementById('editPatNombre').value.trim(),
+        apellidos: document.getElementById('editPatApellido').value.trim(),
+        fechaNacimiento: fechaNac,
+        edadCalculada: edadCalc,
+        genero: document.getElementById('editPatGenero').value,
+        dolorEva: parseInt(document.getElementById('editPatEva').value) || 0
+      });
+
+      lista[idx].anamnesis = Object.assign({}, lista[idx].anamnesis, {
+        patologia: document.getElementById('editPatPatologia').value,
+        lado: document.getElementById('editPatLado').value,
+        articulacion: document.getElementById('editPatArticulacion').value,
+        nota: document.getElementById('editPatNota').value.trim()
+      });
+
+      lista[idx].programacionMensual = Object.assign({}, lista[idx].programacionMensual, {
+        fechaInicio: document.getElementById('editRxFechaInicio').value,
+        fechaFin: document.getElementById('editRxFechaFin').value,
+        rutinaId: selRutina.value,
+        modelo3D: modelo3D
+      });
+
+      guardarBasePacientes(lista);
+      renderizarListaPacientes();
+      document.getElementById('historialModalTitle').innerText = `Historia clínica — ${lista[idx].paciente.nombres} ${lista[idx].paciente.apellidos}`;
+      renderHistoriaClinica(lista[idx]);
+      renderTerapias(lista[idx]);
+      cerrarModalEditarPaciente();
+    }
 
     function fechaLocalMedico(d) {
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1237,6 +2073,7 @@
 
     function renderTerapias(f) {
       const cont = document.getElementById('listaTerapias');
+      if (!cont) return;
       cont.innerHTML = '';
       const dias = calcularDiasTerapia(f);
       let completadas = 0;
@@ -1248,45 +2085,67 @@
         else if (est.habilitada) habilitadas++;
 
         const fila = document.createElement('div');
-        fila.style.cssText = 'display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px solid #303050;';
+        fila.className = 'switch-row';
 
         const nombre = document.createElement('span');
-        nombre.style.cssText = 'width:60px; font-weight:bold;';
+        nombre.style.cssText = 'width:62px; font-weight:700; color:var(--text-main);';
         nombre.textContent = 'Día ' + d.dia;
 
         const fecha = document.createElement('input');
         fecha.type = 'date';
         fecha.value = est.programada;
-        fecha.style.cssText = 'width:150px; padding:4px 6px;';
+        fecha.style.cssText = 'width:150px; padding:5px 8px;';
         fecha.onchange = () => { if (fecha.value) modificarTerapia(d.dia, { programada: fecha.value }); };
 
+        // Interruptor visual de habilitar/bloquear terapia
+        const switchWrap = document.createElement('div');
+        switchWrap.style.cssText = 'display:flex; align-items:center; gap:8px;';
+        const switchLbl = document.createElement('label');
+        switchLbl.className = 'toggle-switch';
+        switchLbl.title = est.habilitada ? 'Terapia habilitada' : 'Terapia bloqueada';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = est.habilitada;
+        chk.onchange = () => modificarTerapia(d.dia, { habilitada: chk.checked });
+        const slider = document.createElement('span');
+        slider.className = 'toggle-slider';
+        switchLbl.appendChild(chk);
+        switchLbl.appendChild(slider);
+
         const chip = document.createElement('span');
-        chip.style.cssText = 'min-width:150px; color:' + (est.completada ? '#00d26a' : est.habilitada ? '#ffd700' : '#a0a0c0') + ';';
+        chip.style.cssText = 'min-width:165px; font-weight:600; font-size:0.8rem; color:' + (est.completada ? 'var(--success)' : est.habilitada ? 'var(--primary)' : 'var(--text-muted)') + ';';
         chip.textContent = (est.completada ? '✅ Completada' : est.habilitada ? '▶ Habilitada' : '🔒 Bloqueada') + (est.manual ? ' (manual)' : ' (por fecha)');
 
+        switchWrap.appendChild(switchLbl);
+        switchWrap.appendChild(chip);
+
+        const accionesWrap = document.createElement('div');
+        accionesWrap.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
         const botones = [
-          ['Habilitar', 'btn-call', { habilitada: true }],
-          ['Bloquear', 'btn-danger', { habilitada: false }],
           ['Reabrir', 'btn-info', { habilitada: true, reabiertaEn: new Date().toISOString() }],
           ['Por fecha', 'btn-secondary', { habilitada: undefined }]
         ];
-        fila.appendChild(nombre);
-        fila.appendChild(fecha);
-        fila.appendChild(chip);
         botones.forEach((b) => {
           const btn = document.createElement('button');
           btn.className = b[1];
-          btn.style.cssText = 'padding:4px 10px; font-size:0.75rem;';
+          btn.style.cssText = 'padding:5px 10px; font-size:0.76rem;';
           btn.textContent = b[0];
           btn.onclick = () => modificarTerapia(d.dia, b[2]);
-          fila.appendChild(btn);
+          accionesWrap.appendChild(btn);
         });
+
+        fila.appendChild(nombre);
+        fila.appendChild(fecha);
+        fila.appendChild(switchWrap);
+        fila.appendChild(accionesWrap);
         cont.appendChild(fila);
       });
 
       if (dias.length === 0) cont.textContent = 'Este paciente no tiene programación de terapias.';
-      document.getElementById('terapiasResumenMedico').innerText =
-        dias.length ? `· ${dias.length} terapias · ${completadas} completadas · ${habilitadas} habilitadas` : '';
+      const resEl = document.getElementById('terapiasResumenMedico');
+      if (resEl) {
+        resEl.innerText = dias.length ? `· ${dias.length} terapias · ${completadas} completadas · ${habilitadas} habilitadas` : '';
+      }
     }
 
     function enviarComandoTerapia(comando) {
@@ -1299,7 +2158,7 @@
     }
 
     function limpiarFormulario() {
-      ['patNombre', 'patApellido', 'patDoc', 'patNacimiento', 'patEva', 'patNota'].forEach((id) => {
+      ['patNombre', 'patApellido', 'patDoc', 'patNacimiento', 'patEva', 'patNota', 'rxFechaInicio', 'rxFechaFin'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
@@ -1368,11 +2227,12 @@
 
     function crearCeldaHistoria(etiqueta, valor) {
       const d = document.createElement('div');
+      d.style.cssText = 'background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:8px 12px;';
       const l = document.createElement('div');
-      l.style.cssText = 'font-size:0.7rem; color:#a0a0c0; text-transform:uppercase;';
+      l.style.cssText = 'font-size:0.7rem; color:var(--text-muted); font-weight:700; text-transform:uppercase;';
       l.textContent = etiqueta;
       const v = document.createElement('div');
-      v.style.cssText = 'color:#fff;';
+      v.style.cssText = 'color:var(--text-main); font-weight:600; margin-top:2px;';
       v.textContent = (valor === undefined || valor === null || valor === '') ? '—' : valor;
       d.appendChild(l);
       d.appendChild(v);
@@ -1403,19 +2263,27 @@
       const nota = crearCeldaHistoria('Nota clínica inicial', a.nota);
       nota.style.gridColumn = '1 / -1';
       nota.lastChild.style.whiteSpace = 'pre-wrap';
+      nota.lastChild.style.fontWeight = '400';
       g.appendChild(nota);
     }
 
-    /* ===== Historia clínica de monitoreo ===== */
+    /* ===== Historia clínica de monitoreo y subvistas ===== */
+
+    function cambiarSubvistaHistorial(subviewId, btn) {
+      document.querySelectorAll('.history-subview').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.history-subtab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(subviewId).classList.add('active');
+      if (btn) btn.classList.add('active');
+    }
 
     const CAMPOS_MON = [
-      ['pulso', 'Frecuencia cardíaca', 'lpm', 0],
-      ['respiracion', 'Frecuencia respiratoria', 'rpm', 0],
-      ['saturacion', 'Saturación de oxígeno (SpO₂)', '%', 0],
-      ['temperatura', 'Temperatura corporal', '°C', 1],
-      ['hombro', 'Ángulo de hombro', '°', 0],
-      ['codo', 'Ángulo de codo', '°', 0],
-      ['cadera', 'Ángulo de cadera', '°', 0]
+      ['pulso', 'Frecuencia cardíaca', 'lpm', 0, 'Ref: 60–100 lpm'],
+      ['respiracion', 'Frecuencia respiratoria', 'rpm', 0, 'Ref: 12–20 rpm'],
+      ['saturacion', 'Saturación de oxígeno (SpO₂)', '%', 0, 'Ref: 95–100 %'],
+      ['temperatura', 'Temperatura corporal', '°C', 1, 'Ref: 36.1–37.2 °C'],
+      ['hombro', 'Ángulo de hombro', '°', 0, 'ROM activo'],
+      ['codo', 'Ángulo de codo', '°', 0, 'ROM activo'],
+      ['cadera', 'Ángulo de cadera', '°', 0, 'ROM activo']
     ];
 
     function vitalesDe(ced) {
@@ -1430,6 +2298,7 @@
       return {
         n: nums.length,
         ultima: nums[nums.length - 1],
+        anterior: nums.length >= 2 ? nums[nums.length - 2] : null,
         t: v[v.length - 1].t,
         prom: suma / nums.length,
         min: Math.min.apply(null, nums),
@@ -1478,7 +2347,7 @@
       const f = fichaDelHistorial();
       if (!f) return;
       renderResumenVitales();
-      renderGrafica();
+      renderTodasLasGraficas();
       renderTablaVitales();
       renderSesiones(f);
       renderEventos();
@@ -1512,50 +2381,108 @@
         : '—';
     }
 
-    function renderGrafica() {
-      const cont = document.getElementById('graficaVitales');
-      const clave = document.getElementById('selGrafica').value;
-      const def = CAMPOS_MON.find((c) => c[0] === clave);
-      const pts = vitalesDe(historialCedulaActual)
-        .filter((x) => x[clave] !== null && x[clave] !== undefined)
-        .slice(-400);
+    /* Renderiza todas las gráficas simultáneamente con KPI superior y flecha de tendencia */
+    function renderTodasLasGraficas() {
+      const contenedor = document.getElementById('todasLasGraficasContainer');
+      if (!contenedor) return;
+      contenedor.innerHTML = '';
+      const arr = vitalesDe(historialCedulaActual);
 
-      if (pts.length < 2) {
-        cont.innerHTML = '<p style="color:#a0a0c0; font-size:0.85rem; padding:10px 0;">' +
-          (pts.length === 1 ? 'Solo hay una lectura; se necesitan al menos dos para dibujar la gráfica.' : 'Aún no hay datos de este parámetro.') + '</p>';
-        return;
-      }
+      CAMPOS_MON.forEach((def) => {
+        const clave = def[0];
+        const titulo = def[1];
+        const unidad = def[2];
+        const dec = def[3];
+        const refTexto = def[4] || '';
 
-      const W = 900, H = 260, mL = 55, mR = 20, mT = 15, mB = 40;
-      const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
-      let vmin = Math.min.apply(null, pts.map((p) => p[clave]));
-      let vmax = Math.max.apply(null, pts.map((p) => p[clave]));
-      if (vmin === vmax) { vmin -= 1; vmax += 1; }
-      const pad = (vmax - vmin) * 0.12;
-      vmin -= pad; vmax += pad;
+        const st = estadisticas(arr, clave);
+        const pts = arr.filter((x) => x[clave] !== null && x[clave] !== undefined).slice(-400);
 
-      const x = (t) => mL + (t1 === t0 ? 0 : (t - t0) / (t1 - t0)) * (W - mL - mR);
-      const y = (v) => mT + (1 - (v - vmin) / (vmax - vmin)) * (H - mT - mB);
+        const card = document.createElement('div');
+        card.className = 'chart-card';
 
-      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%; min-width:600px; height:auto; background:#0b0b14; border-radius:6px;">';
-      for (let i = 0; i <= 4; i++) {
-        const v = vmin + (vmax - vmin) * (i / 4);
-        const yy = y(v);
-        svg += '<line x1="' + mL + '" y1="' + yy + '" x2="' + (W - mR) + '" y2="' + yy + '" stroke="#303050" stroke-width="1"/>';
-        svg += '<text x="' + (mL - 6) + '" y="' + (yy + 4) + '" fill="#a0a0c0" font-size="11" text-anchor="end">' + v.toFixed(def[3] === 0 ? 0 : 1) + '</text>';
-      }
-      const linea = pts.map((p) => x(p.t).toFixed(1) + ',' + y(p[clave]).toFixed(1)).join(' ');
-      svg += '<polyline fill="none" stroke="#00d26a" stroke-width="2" points="' + linea + '"/>';
-      if (pts.length <= 120) {
-        pts.forEach((p) => {
-          svg += '<circle cx="' + x(p.t).toFixed(1) + '" cy="' + y(p[clave]).toFixed(1) + '" r="3" fill="#00d26a"/>';
-        });
-      }
-      svg += '<text x="' + mL + '" y="' + (H - 12) + '" fill="#a0a0c0" font-size="11" text-anchor="start">' + fmtFechaHora(t0) + '</text>';
-      svg += '<text x="' + (W - mR) + '" y="' + (H - 12) + '" fill="#a0a0c0" font-size="11" text-anchor="end">' + fmtFechaHora(t1) + '</text>';
-      svg += '<text x="12" y="' + (mT + 8) + '" fill="#a0a0c0" font-size="11">' + def[2] + '</text>';
-      svg += '</svg>';
-      cont.innerHTML = svg;
+        // Calcular KPI superior y flecha de tendencia
+        let valorActualTxt = 'Sin datos';
+        let promTxt = refTexto;
+        let trendHtml = '<span class="trend-badge trend-flat">→ Sin cambio</span>';
+
+        if (st) {
+          valorActualTxt = `${fmtNum(st.ultima, dec)} ${unidad}`;
+          promTxt = `Prom: ${fmtNum(st.prom, dec)} ${unidad} · ${refTexto}`;
+          if (st.anterior !== null) {
+            const diff = st.ultima - st.anterior;
+            const umbral = dec === 0 ? 0.49 : 0.05;
+            if (diff > umbral) {
+              trendHtml = `<span class="trend-badge trend-up" title="Subió respecto a ${fmtNum(st.anterior, dec)} ${unidad}">↑ +${fmtNum(diff, dec)}</span>`;
+            } else if (diff < -umbral) {
+              trendHtml = `<span class="trend-badge trend-down" title="Bajó respecto a ${fmtNum(st.anterior, dec)} ${unidad}">↓ ${fmtNum(diff, dec)}</span>`;
+            } else {
+              trendHtml = `<span class="trend-badge trend-flat" title="Estable respecto a ${fmtNum(st.anterior, dec)} ${unidad}">→ Estable</span>`;
+            }
+          } else {
+            trendHtml = '<span class="trend-badge trend-flat">→ 1ra lectura</span>';
+          }
+        }
+
+        const header = document.createElement('div');
+        header.className = 'chart-kpi-header';
+        header.innerHTML = `
+          <div>
+            <div class="chart-kpi-title">${titulo}</div>
+            <div class="chart-kpi-ref">${promTxt}</div>
+          </div>
+          <div class="chart-kpi-value-wrap">
+            <span class="chart-kpi-val">${valorActualTxt}</span>
+            ${trendHtml}
+          </div>
+        `;
+        card.appendChild(header);
+
+        const graphBody = document.createElement('div');
+        if (pts.length < 2) {
+          graphBody.innerHTML = '<p style="color:var(--text-muted); font-size:0.82rem; padding:28px 10px; text-align:center; background:var(--bg-subtle); border-radius:6px;">' +
+            (pts.length === 1 ? 'Solo hay una lectura registrada; se necesitan al menos dos para trazar la curva.' : 'Aún no hay datos registrados para este parámetro.') + '</p>';
+        } else {
+          const W = 560, H = 200, mL = 46, mR = 16, mT = 14, mB = 32;
+          const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+          let vmin = Math.min.apply(null, pts.map((p) => Number(p[clave])));
+          let vmax = Math.max.apply(null, pts.map((p) => Number(p[clave])));
+          if (vmin === vmax) { vmin -= 1; vmax += 1; }
+          const pad = (vmax - vmin) * 0.14;
+          vmin -= pad; vmax += pad;
+
+          const x = (t) => mL + (t1 === t0 ? 0 : (t - t0) / (t1 - t0)) * (W - mL - mR);
+          const y = (v) => mT + (1 - (v - vmin) / (vmax - vmin)) * (H - mT - mB);
+
+          const bgSvg = '#0f172a';
+          const borderSvg = '#27354f';
+          const gridSvg = '#1e293b';
+          const txtSvg = '#94a3b8';
+          const lineSvg = '#4589ff';
+
+          let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%; height:auto; background:' + bgSvg + '; border:1px solid ' + borderSvg + '; border-radius:6px;">';
+          for (let i = 0; i <= 4; i++) {
+            const v = vmin + (vmax - vmin) * (i / 4);
+            const yy = y(v);
+            svg += '<line x1="' + mL + '" y1="' + yy + '" x2="' + (W - mR) + '" y2="' + yy + '" stroke="' + gridSvg + '" stroke-width="1"/>';
+            svg += '<text x="' + (mL - 6) + '" y="' + (yy + 4) + '" fill="' + txtSvg + '" font-size="10" text-anchor="end">' + v.toFixed(dec === 0 ? 0 : 1) + '</text>';
+          }
+          const linea = pts.map((p) => x(p.t).toFixed(1) + ',' + y(Number(p[clave])).toFixed(1)).join(' ');
+          svg += '<polyline fill="none" stroke="' + lineSvg + '" stroke-width="2.2" points="' + linea + '"/>';
+          if (pts.length <= 120) {
+            pts.forEach((p) => {
+              svg += '<circle cx="' + x(p.t).toFixed(1) + '" cy="' + y(Number(p[clave])).toFixed(1) + '" r="3" fill="' + lineSvg + '"/>';
+            });
+          }
+          svg += '<text x="' + mL + '" y="' + (H - 10) + '" fill="' + txtSvg + '" font-size="10" text-anchor="start">' + horaCorta(t0) + '</text>';
+          svg += '<text x="' + (W - mR) + '" y="' + (H - 10) + '" fill="' + txtSvg + '" font-size="10" text-anchor="end">' + horaCorta(t1) + '</text>';
+          svg += '<text x="10" y="' + (mT + 8) + '" fill="' + txtSvg + '" font-size="10" font-weight="bold">' + unidad + '</text>';
+          svg += '</svg>';
+          graphBody.innerHTML = svg;
+        }
+        card.appendChild(graphBody);
+        contenedor.appendChild(card);
+      });
     }
 
     function renderTablaVitales() {
@@ -1567,7 +2494,7 @@
         const tr = document.createElement('tr');
         const td = celda(tr, 'Aún no hay lecturas registradas. Se guardan solas cuando el paciente está conectado y el sensor envía datos.');
         td.colSpan = 12;
-        td.style.cssText = 'text-align:center; color:#a0a0c0; padding:14px;';
+        td.style.cssText = 'text-align:center; color:var(--text-muted); padding:18px;';
         tbody.appendChild(tr);
         document.getElementById('btnMasVitales').style.display = 'none';
         return;
@@ -1619,7 +2546,7 @@
         const tr = document.createElement('tr');
         const td = celda(tr, 'Sin sesiones registradas todavía.');
         td.colSpan = 8;
-        td.style.cssText = 'text-align:center; color:#a0a0c0; padding:14px;';
+        td.style.cssText = 'text-align:center; color:var(--text-muted); padding:14px;';
         tbody.appendChild(tr);
         return;
       }
@@ -1652,14 +2579,14 @@
       const ev = ((historialCache[String(historialCedulaActual)] || {}).eventos || []).slice().reverse();
       if (!ev.length) {
         const p = document.createElement('div');
-        p.style.color = '#a0a0c0';
+        p.style.color = 'var(--text-muted)';
         p.textContent = 'Sin eventos registrados.';
         cont.appendChild(p);
         return;
       }
       ev.forEach((e) => {
         const item = document.createElement('div');
-        item.style.cssText = 'border-bottom:1px solid #303050; padding:5px 0;';
+        item.style.cssText = 'border-bottom:1px solid var(--border); padding:6px 0;';
         item.textContent = fmtFechaHora(e.t) + ' — ' + (e.tipo || '') + (e.detalle ? ': ' + e.detalle : '');
         cont.appendChild(item);
       });
@@ -1690,16 +2617,16 @@
       const apuntes = (f.apuntesMedico || []).slice().reverse();
       if (apuntes.length === 0) {
         const p = document.createElement('div');
-        p.style.color = '#a0a0c0';
+        p.style.color = 'var(--text-muted)';
         p.textContent = 'Aún no hay apuntes.';
         cont.appendChild(p);
         return;
       }
       apuntes.forEach((a) => {
         const item = document.createElement('div');
-        item.style.cssText = 'border-bottom:1px solid #303050; padding:6px 0;';
+        item.style.cssText = 'border-bottom:1px solid var(--border); padding:6px 0;';
         const fecha = document.createElement('div');
-        fecha.style.cssText = 'font-size:0.7rem; color:#a0a0c0;';
+        fecha.style.cssText = 'font-size:0.72rem; color:var(--text-muted); font-weight:600;';
         fecha.textContent = new Date(a.fecha).toLocaleString('es-CO');
         const texto = document.createElement('div');
         texto.style.whiteSpace = 'pre-wrap';
@@ -1738,14 +2665,14 @@
       document.getElementById('historialClinicoModal').style.display = 'none';
     }
 
-    /* Obtiene cámara y micrófono del médico. Si este equipo no tiene
-       cámara, intenta solo micrófono; si tampoco, queda en modo solo-recibir. */
+    /* Obtiene cámara y micrófono del médico. */
     async function prepararMediosMedico() {
       if (streamMedicoActivo) return;
 
       const docVid = document.getElementById('doctorLiveVideo');
       const docOverlay = document.getElementById('doctorCallOverlay');
       const btnToggle = document.getElementById('btnToggleMedicoCam');
+      const btnMic = document.getElementById('btnToggleMedicoMic');
 
       let stream = null;
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -1770,12 +2697,23 @@
         docVid.srcObject = stream;
         docVid.style.display = 'block';
         docOverlay.style.display = 'none';
-        btnToggle.innerText = '🔇 Apagar Cámara Médico';
+        btnToggle.innerText = '📹 Apagar Cámara Médico';
+        btnToggle.className = 'btn-call';
       } else {
         docVid.style.display = 'none';
         docOverlay.style.display = 'block';
         docOverlay.innerHTML = '<p>Este equipo no tiene cámara disponible.<br>Verás y escucharás al paciente' +
           (stream ? ' y él te escuchará a ti.' : ' sin enviar audio ni video.') + '</p>';
+        btnToggle.innerText = '📹 Encender Cámara Médico';
+        btnToggle.className = 'btn-secondary';
+      }
+
+      if (stream && stream.getAudioTracks().length) {
+        btnMic.innerText = '🎙️ Silenciar Micrófono';
+        btnMic.className = 'btn-call';
+      } else {
+        btnMic.innerText = '🔇 Micrófono No Disponible';
+        btnMic.className = 'btn-secondary';
       }
     }
 
@@ -1843,12 +2781,35 @@
       if (pista.enabled) {
         docVid.style.display = 'block';
         docOverlay.style.display = 'none';
-        btnToggle.innerText = '🔇 Apagar Cámara Médico';
+        btnToggle.innerText = '📹 Apagar Cámara Médico';
+        btnToggle.className = 'btn-call';
       } else {
         docVid.style.display = 'none';
         docOverlay.style.display = 'block';
-        docOverlay.innerHTML = '<p>Cámara médica apagada.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
-        btnToggle.innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
+        docOverlay.innerHTML = '<p>Cámara médica apagada.<br>Haz clic en <strong>"Encender Cámara Médico"</strong>.</p>';
+        btnToggle.innerText = '📹 Encender Cámara Médico';
+        btnToggle.className = 'btn-secondary';
+      }
+    }
+
+    /* Botón único para encender / apagar el micrófono del médico */
+    function alternarMicrofonoMedicoEnVivo() {
+      const btnMic = document.getElementById('btnToggleMedicoMic');
+      const pistaAudio = streamMedicoActivo ? streamMedicoActivo.getAudioTracks()[0] : null;
+
+      if (!pistaAudio) {
+        alert('Este equipo no tiene micrófono disponible o no se concedió el permiso de audio.');
+        return;
+      }
+
+      pistaAudio.enabled = !pistaAudio.enabled;
+
+      if (pistaAudio.enabled) {
+        btnMic.innerText = '🎙️ Silenciar Micrófono';
+        btnMic.className = 'btn-call';
+      } else {
+        btnMic.innerText = '🔇 Activar Micrófono';
+        btnMic.className = 'btn-danger';
       }
     }
 
@@ -1868,11 +2829,16 @@
 
       const docOverlay = document.getElementById('doctorCallOverlay');
       docOverlay.style.display = 'block';
-      docOverlay.innerHTML = '<p>Cámara médica inactiva.<br>Haz clic en <strong>"Activar/Ocultar Cámara Médico"</strong>.</p>';
-      document.getElementById('btnToggleMedicoCam').innerText = '👨‍⚕️ Activar/Ocultar Cámara Médico';
+      docOverlay.innerHTML = '<p>Cámara médica inactiva.<br>Haz clic en <strong>"Encender Cámara Médico"</strong>.</p>';
+      const btnCam = document.getElementById('btnToggleMedicoCam');
+      btnCam.innerText = '📹 Encender Cámara Médico';
+      btnCam.className = 'btn-call';
+
+      const btnMic = document.getElementById('btnToggleMedicoMic');
+      btnMic.innerText = '🎙️ Silenciar Micrófono';
+      btnMic.className = 'btn-call';
 
       pacienteEnLlamadaActual = null;
-      mostrarEstadoPaciente('Esperando flujo del paciente...');
       document.getElementById('mEstadoLlamada').innerText = 'Sin llamada';
       document.getElementById('liveCallModal').style.display = 'none';
     }
