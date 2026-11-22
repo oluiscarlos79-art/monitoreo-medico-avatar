@@ -1,10 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Portal Médico — UAC Tele-Rehabilitación (Historial, KPIs y Diagnóstico IA)</title>
-  <!-- Socket.IO -->
   <script src="/socket.io/socket.io.js"></script>
   <style>
     :root {
@@ -48,7 +47,6 @@
       line-height: 1.5;
     }
 
-    /* ---------- LOGIN, REGISTRO Y RECUPERACIÓN ---------- */
     #loginContainer {
       width: 100%;
       max-width: 440px;
@@ -103,7 +101,6 @@
       color: var(--primary-hover);
     }
 
-    /* ---------- PANEL PRINCIPAL ---------- */
     #medicoPanel {
       display: none;
       width: 100%;
@@ -292,7 +289,6 @@
     }
     .calc-edad { font-size: 0.76rem; color: var(--secondary); font-weight: 600; margin-top: 4px; display: block; }
 
-    /* ---------- MODALES ---------- */
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -349,7 +345,6 @@
       box-shadow: var(--shadow-lg);
     }
 
-    /* Sub-pestañas dentro de Historia Clínica */
     .history-subtabs {
       display: flex;
       gap: 10px;
@@ -375,7 +370,6 @@
     .history-subview { display: none; }
     .history-subview.active { display: block; }
 
-    /* KPIs generales */
     .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
     .kpi-card {
       background: var(--bg-card);
@@ -389,7 +383,6 @@
     .kpi-card .val { font-size: 1.55rem; font-weight: 700; color: var(--primary); margin-top: 6px; font-family: 'Consolas', monospace; }
     .kpi-card .lbl { font-size: 0.74rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
 
-    /* Grid de gráficas con KPI superior */
     .charts-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -454,7 +447,6 @@
     .score-badge-fair { color: var(--warning); font-weight: bold; }
     .score-badge-bad { color: var(--danger); font-weight: bold; }
 
-    /* ---------- VIDEOCONFERENCIA ---------- */
     #liveCallModal {
       display: none;
       position: fixed;
@@ -511,7 +503,6 @@
       border: 1px solid rgba(255,255,255,0.2);
     }
 
-    /* Grilla ajustada sin recuadro de cámara del paciente: Pantalla del paciente + Retorno médico */
     #callStagesGrid {
       grid-template-columns: 2.3fr 1fr;
       grid-template-rows: 1fr;
@@ -520,7 +511,6 @@
     #callStagesGrid > #espejoBox { grid-column: 1; grid-row: 1; }
     #callStagesGrid > #doctorStageBox { grid-column: 2; grid-row: 1; }
 
-    /* Switch toggle para habilitar terapias */
     .switch-row {
       display: flex;
       align-items: center;
@@ -584,7 +574,6 @@
 </head>
 <body>
 
-  <!-- LOGIN MÉDICO -->
   <div id="loginContainer">
     <div class="auth-header">
       <img src="./escudo_uac.png" alt="Escudo UAC">
@@ -608,7 +597,6 @@
     </div>
   </div>
 
-  <!-- MODAL: REGISTRO DE NUEVO MÉDICO -->
   <div id="registroMedicoModal" class="modal-backdrop">
     <div class="modal-box-sm">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
@@ -650,7 +638,6 @@
     </div>
   </div>
 
-  <!-- MODAL: RECUPERACIÓN DE CONTRASEÑA -->
   <div id="recuperarClaveModal" class="modal-backdrop">
     <div class="modal-box-sm">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
@@ -658,21 +645,33 @@
         <button type="button" class="btn-secondary" style="padding:5px 10px;" onclick="cerrarModalRecuperarClave()">✕</button>
       </div>
       <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:14px;">
-        Ingresa el correo electrónico asociado a tu cuenta médica. Te enviaremos un enlace o código de verificación para restablecer tu contraseña.
+        Ingresa el correo electrónico asociado a tu cuenta médica para recibir un código de verificación.
       </p>
       <div class="form-group">
         <label>Correo electrónico registrado</label>
         <input type="email" id="recEmail" placeholder="nombre@uac.edu.co" onkeydown="if(event.key==='Enter')enviarRecuperacionClave()">
       </div>
+
+      <div id="pasoRestablecerClave" style="display:none; border-top:1px solid var(--border); padding-top:14px; margin-top:14px;">
+        <div class="form-group">
+          <label>Código de 6 dígitos recibido</label>
+          <input type="text" id="recCodigo" placeholder="Ej. 482910" maxlength="6">
+        </div>
+        <div class="form-group">
+          <label>Nueva contraseña</label>
+          <input type="password" id="recNuevaClave" placeholder="••••••••">
+        </div>
+        <button type="button" class="btn-call" style="width:100%;" onclick="confirmarNuevaClave()">Guardar Nueva Contraseña</button>
+      </div>
+
       <div id="recuperarClaveFeedback" class="auth-banner"></div>
       <div style="display:flex; gap:10px; margin-top:14px;">
-        <button type="button" style="flex:1;" onclick="enviarRecuperacionClave()">Enviar enlace de recuperación</button>
+        <button type="button" id="btnEnviarCodigoRec" style="flex:1;" onclick="enviarRecuperacionClave()">Enviar código al correo</button>
         <button type="button" class="btn-secondary" onclick="cerrarModalRecuperarClave()">Cerrar</button>
       </div>
     </div>
   </div>
 
-  <!-- PANEL CLÍNICO GENERAL -->
   <div id="medicoPanel">
     <div id="emergencyAlertBanner">
       <div>
@@ -701,7 +700,6 @@
       <button class="tab-btn" onclick="cambiarPestaña('tab-lista', this); renderizarListaPacientes();">📋 Pacientes en Terapia (<span id="contadorPacientes">0</span>)</button>
     </div>
 
-    <!-- PESTAÑA 1: FORMULARIO -->
     <div id="tab-formulario" class="tab-content active">
       <div class="section-card">
         <h3>1. Datos de Identificación (Cédula = Credencial de Paciente)</h3>
@@ -802,7 +800,6 @@
       <div id="authBanner" class="auth-banner auth-active">✅ Paciente guardado y sincronizado con el servidor.</div>
     </div>
 
-    <!-- PESTAÑA 2: LISTA PACIENTES -->
     <div id="tab-lista" class="tab-content">
       <div class="section-card">
         <h3>Pacientes Registrados en Sistema de Telerehabilitación</h3>
@@ -827,7 +824,6 @@
     </div>
   </div>
 
-  <!-- MODAL DE HISTORIAL CLÍNICO -->
   <div id="historialClinicoModal">
     <div class="history-container">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 18px; flex-wrap:wrap; gap:12px;">
@@ -843,13 +839,11 @@
         </div>
       </div>
 
-      <!-- PESTAÑAS INTERNAS DE HISTORIA CLÍNICA (Separación de Datos Entrantes en Bruto) -->
       <div class="history-subtabs no-print">
         <button type="button" class="history-subtab-btn active" onclick="cambiarSubvistaHistorial('subview-resumen-clinico', this)">📊 Historia Clínica, KPIs y Gráficas</button>
         <button type="button" class="history-subtab-btn" onclick="cambiarSubvistaHistorial('subview-datos-bruto', this)">📡 Datos Entrantes en Bruto (Tiempo Real)</button>
       </div>
 
-      <!-- SUBVISTA 1: HISTORIA CLÍNICA Y TODAS LAS GRÁFICAS SIEMPRE VISIBLES -->
       <div id="subview-resumen-clinico" class="history-subview active">
         <div id="historiaClinicaCard" class="section-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
@@ -865,7 +859,6 @@
           <div class="kpi-card"><div class="lbl">Último dato recibido</div><div class="val" id="kpiRatioEjecucion" style="font-size:1.05rem;">—</div></div>
         </div>
 
-        <!-- TODAS LAS GRÁFICAS SIEMPRE VISIBLES CON KPI SUPERIOR Y FLECHA DE TENDENCIA -->
         <div class="section-card">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
             <h3 style="margin:0;">Evolución Clínica en el Tiempo (Signos Vitales y Rangos Articulares)</h3>
@@ -920,7 +913,6 @@
         </div>
       </div>
 
-      <!-- SUBVISTA 2: DATOS ENTRANTES EN BRUTO Y EXPORTACIÓN A EXCEL -->
       <div id="subview-datos-bruto" class="history-subview">
         <div class="section-card">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
@@ -947,7 +939,6 @@
     </div>
   </div>
 
-  <!-- MODAL: EDITAR INFORMACIÓN DEL PACIENTE Y HABILITAR TERAPIAS -->
   <div id="editarPacienteModal" class="modal-backdrop" style="z-index: 1300;">
     <div class="modal-box-md">
       <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:18px;">
@@ -1026,7 +1017,6 @@
         </div>
       </div>
 
-      <!-- SECCIÓN DE HABILITAR TERAPIAS REUBICADA AQUÍ -->
       <div class="section-card" style="margin-bottom:0;">
         <h3>🗓️ Habilitar y Gestionar Terapias Programadas <span id="terapiasResumenMedico" style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;"></span></h3>
         <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:10px;">
@@ -1037,7 +1027,6 @@
     </div>
   </div>
 
-  <!-- MODAL DE VIDEOCONFERENCIA -->
   <div id="liveCallModal">
     <div class="call-container">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; flex-wrap:wrap; gap:10px;">
@@ -1074,7 +1063,6 @@
         <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="enviarComandoTerapia('finalizar')">⏹ Finalizar</button>
       </div>
 
-      <!-- SECCIÓN DE MONITOREO EN VIVO (SIN RECUADRO DE CÁMARA DEL PACIENTE) -->
       <div class="call-stages" id="callStagesGrid">
         <div class="call-box" id="espejoBox" style="position:relative; overflow:hidden; background:#000;">
           <span class="mode-tag" style="z-index:6;">PANTALLA DEL PACIENTE (EN VIVO)</span>
@@ -1103,7 +1091,6 @@
     </div>
   </div>
 
-  <!-- MODAL OBSERVAR EN SILENCIO -->
   <div id="observarModal" style="display:none; position:fixed; inset:0; background:#05050a; z-index:1500; flex-direction:column;">
     <div style="display:flex; align-items:center; gap:14px; padding:10px 16px; background:#0f172a; border-bottom:1px solid #334155;">
       <span id="observarTitulo" style="font-weight:bold; color:#38bdf8;">Observando</span>
@@ -1144,12 +1131,11 @@
     let configuracionIce = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
     let iceCargado = false;
 
-    /* ---------- Datos guardados en el SERVIDOR ---------- */
     let tokenMedico = sessionStorage.getItem('uac_token_medico') || '';
     let baseCache = [];
-    const enviadoAlServidor = {};   // cédula -> última ficha enviada (texto)
-    let ultimosVitalesReg = {};     // cédula -> último registro de signos vitales
-    let historialCache = {};        // cédula -> { vitales: [], eventos: [] }
+    const enviadoAlServidor = {};
+    let ultimosVitalesReg = {};
+    let historialCache = {};
     let vitalesVisibles = 100;
     let temporizadorRenderHistoria = null;
     let temporizadorReintento = null;
@@ -1166,17 +1152,14 @@
       return r;
     }
 
-
     window.addEventListener('DOMContentLoaded', () => {
       calcularEdadAutomatica();
       actualizarModeloTerapia();
-      // Si ya había iniciado sesión en esta pestaña, se retoma sin pedir clave
       if (tokenMedico) {
         entrarAlPanel().catch(() => cerrarSesionMedico(true));
       }
     });
 
-    /* ---------- Registro y Recuperación de Contraseña ---------- */
     function abrirModalRegistroMedico() {
       document.getElementById('registroMedicoFeedback').style.display = 'none';
       document.getElementById('registroMedicoModal').style.display = 'flex';
@@ -1235,7 +1218,11 @@
 
     function abrirModalRecuperarClave() {
       document.getElementById('recuperarClaveFeedback').style.display = 'none';
+      document.getElementById('pasoRestablecerClave').style.display = 'none';
+      document.getElementById('btnEnviarCodigoRec').innerText = 'Enviar código al correo';
       document.getElementById('recEmail').value = '';
+      document.getElementById('recCodigo').value = '';
+      document.getElementById('recNuevaClave').value = '';
       document.getElementById('recuperarClaveModal').style.display = 'flex';
     }
 
@@ -1273,7 +1260,9 @@
         }
         fb.className = 'auth-banner auth-active';
         fb.style.cssText = 'display:block;';
-        fb.innerText = data.mensaje || ('✅ Se ha enviado un enlace/código de restablecimiento a ' + email + '. Revisa tu bandeja de entrada.');
+        fb.innerText = data.mensaje || ('✅ Se ha enviado un código de verificación a ' + email + '. Revisa tu bandeja de entrada.');
+        document.getElementById('pasoRestablecerClave').style.display = 'block';
+        document.getElementById('btnEnviarCodigoRec').innerText = 'Reenviar código';
       } catch (err) {
         fb.className = 'auth-banner';
         fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
@@ -1281,7 +1270,44 @@
       }
     }
 
-    /* Pide al servidor la lista de servidores STUN/TURN */
+    async function confirmarNuevaClave() {
+      const email = document.getElementById('recEmail').value.trim();
+      const codigo = document.getElementById('recCodigo').value.trim();
+      const nuevaClave = document.getElementById('recNuevaClave').value.trim();
+      const fb = document.getElementById('recuperarClaveFeedback');
+
+      if (!codigo || !nuevaClave) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Ingresa el código recibido y la nueva contraseña.';
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/medico/restablecer-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, codigo, nuevaClave })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          fb.className = 'auth-banner';
+          fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+          fb.innerText = data.error || 'No se pudo actualizar la contraseña.';
+          return;
+        }
+        fb.className = 'auth-banner auth-active';
+        fb.style.cssText = 'display:block;';
+        fb.innerText = data.mensaje || '✅ Contraseña actualizada. Ya puedes iniciar sesión.';
+        if (data.user) document.getElementById('medUser').value = data.user;
+        setTimeout(() => cerrarModalRecuperarClave(), 1800);
+      } catch (err) {
+        fb.className = 'auth-banner';
+        fb.style.cssText = 'display:block; background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);';
+        fb.innerText = 'Error de conexión al restablecer la contraseña.';
+      }
+    }
+
     async function cargarConfiguracionIce() {
       if (iceCargado) return;
       try {
@@ -1330,13 +1356,11 @@
         estadoSrv.style.background = "var(--danger-bg)";
       });
 
-      // Lista de pacientes ya conectados al entrar el médico
       socket.on('server:patients-online', (lista) => {
         pacientesEnLinea = new Set((lista || []).map(p => String(p.cedula)));
         renderizarListaPacientes();
       });
 
-      // Un paciente entra o sale
       socket.on('server:patient-online', (d) => {
         if (!d || !d.cedula) return;
         if (d.conectado) pacientesEnLinea.add(String(d.cedula));
@@ -1344,20 +1368,17 @@
         renderizarListaPacientes();
       });
 
-      // Alerta SOS del paciente
       socket.on('patient:sos', (alerta) => {
         alertaActual = alerta;
         mostrarNotificacionAlertaMedico(alerta);
       });
 
-      // Movimiento y repeticiones en vivo
       socket.on('patient:movement', (d) => {
         if (!d || !d.cedula) return;
         ultimasMetricas[String(d.cedula)] = d;
         if (String(d.cedula) === String(pacienteEnLlamadaActual)) pintarMetricas(d);
       });
 
-      // Estado completo del paciente (1 vez por segundo)
       socket.on('patient:state', (d) => {
         if (!d || !d.cedula) return;
         ultimasMetricas[String(d.cedula)] = d;
@@ -1372,7 +1393,6 @@
         console.log('Repetición recibida:', d);
       });
 
-      // Cada lectura de signos vitales llega ya guardada en el servidor
       socket.on('patient:vitals', (r) => {
         if (!r || !r.cedula) return;
         const c = String(r.cedula);
@@ -1401,7 +1421,6 @@
         }
       });
 
-      // ---- Señalización de la videollamada ----
       socket.on('server:patient-offline', (d) => {
         if (d && String(d.cedula) === String(pacienteEnLlamadaActual)) {
           mostrarEstadoPaciente('El paciente no está conectado.');
@@ -1468,8 +1487,6 @@
       return new Date(t).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     }
 
-    /* Muestra el valor que manda el paciente; si no trae uno, usa la última
-       lectura guardada de ese paciente (con la hora en que llegó). */
     function textoVitalMedico(d, campo, clave, unidad, dec) {
       const t = d && d.vitales ? d.vitales[campo] : null;
       if (t && !/no disponible/i.test(t)) return t;
@@ -1533,7 +1550,6 @@
       }
     }
 
-    /* El paciente aceptó: el médico crea la oferta WebRTC. */
     async function iniciarOfertaHaciaPaciente() {
       const cedula = pacienteEnLlamadaActual;
       if (!cedula) return;
@@ -1646,7 +1662,6 @@
       return baseCache;
     }
 
-    // Copia local solo como respaldo y para la pantalla espejo
     function espejarLocal() {
       try { localStorage.setItem('uac_base_pacientes', JSON.stringify(baseCache)); } catch (e) {}
     }
@@ -1709,7 +1724,6 @@
     }
 
     async function entrarAlPanel() {
-      // Respaldo del navegador (se lee ANTES de sobrescribirlo)
       let respaldo = [];
       try { respaldo = JSON.parse(localStorage.getItem('uac_base_pacientes') || '[]'); } catch (e) {}
 
@@ -1717,7 +1731,6 @@
       if (!r.ok) throw new Error('No se pudo cargar la lista de pacientes');
       let lista = await r.json();
 
-      // Pacientes que solo existían en este navegador se suben al servidor
       const enServidor = new Set(lista.map((f) => String(f.paciente.documento)));
       const faltantes = (Array.isArray(respaldo) ? respaldo : []).filter(
         (f) => f && f.paciente && f.paciente.documento && !enServidor.has(String(f.paciente.documento))
@@ -1833,8 +1846,6 @@
       });
     }
 
-    /* ---------- Pantalla espejo del paciente ---------- */
-
     function ajustarEspejo(frameId) {
       const e = espejos[frameId];
       if (!e) return;
@@ -1904,8 +1915,6 @@
     });
     window.addEventListener('resize', () => Object.keys(espejos).forEach(ajustarEspejo));
 
-    /* ---------- Observación en silencio ---------- */
-
     function actualizarEstadoObservacion(cedula) {
       const el = document.getElementById('observarEstado');
       if (!pacientesEnLinea.has(String(cedula))) {
@@ -1938,8 +1947,6 @@
       const e = espejos['observarFrame'];
       if (e) actualizarEstadoObservacion(e.cedula);
     }, 1000);
-
-    /* ---------- Edición de Paciente y Terapias Programadas ---------- */
 
     function abrirModalEditarPaciente() {
       const f = fichaDelHistorial();
@@ -2097,7 +2104,6 @@
         fecha.style.cssText = 'width:150px; padding:5px 8px;';
         fecha.onchange = () => { if (fecha.value) modificarTerapia(d.dia, { programada: fecha.value }); };
 
-        // Interruptor visual de habilitar/bloquear terapia
         const switchWrap = document.createElement('div');
         switchWrap.style.cssText = 'display:flex; align-items:center; gap:8px;';
         const switchLbl = document.createElement('label');
@@ -2165,7 +2171,6 @@
       document.getElementById('edadCalculadaDisplay').innerText = '';
     }
 
-    /* El servidor ya guardó la sesión; aquí solo se actualiza lo que ve el médico */
     function guardarSesionRecibida(d) {
       if (!d || !d.cedula) return;
       const ced = String(d.cedula);
@@ -2266,8 +2271,6 @@
       nota.lastChild.style.fontWeight = '400';
       g.appendChild(nota);
     }
-
-    /* ===== Historia clínica de monitoreo y subvistas ===== */
 
     function cambiarSubvistaHistorial(subviewId, btn) {
       document.querySelectorAll('.history-subview').forEach(el => el.classList.remove('active'));
@@ -2381,7 +2384,6 @@
         : '—';
     }
 
-    /* Renderiza todas las gráficas simultáneamente con KPI superior y flecha de tendencia */
     function renderTodasLasGraficas() {
       const contenedor = document.getElementById('todasLasGraficasContainer');
       if (!contenedor) return;
@@ -2401,7 +2403,6 @@
         const card = document.createElement('div');
         card.className = 'chart-card';
 
-        // Calcular KPI superior y flecha de tendencia
         let valorActualTxt = 'Sin datos';
         let promTxt = refTexto;
         let trendHtml = '<span class="trend-badge trend-flat">→ Sin cambio</span>';
@@ -2649,7 +2650,6 @@
       renderMonitoreo();
       document.getElementById('historialClinicoModal').style.display = 'flex';
 
-      // Los datos guardados (signos vitales y eventos) se piden al servidor
       try {
         const r = await api('/api/pacientes/' + encodeURIComponent(cedula) + '/historial');
         if (r.ok) {
@@ -2665,7 +2665,6 @@
       document.getElementById('historialClinicoModal').style.display = 'none';
     }
 
-    /* Obtiene cámara y micrófono del médico. */
     async function prepararMediosMedico() {
       if (streamMedicoActivo) return;
 
@@ -2732,7 +2731,6 @@
         return;
       }
 
-      // Ya hay una llamada en curso con este mismo paciente: solo mostrar la ventana
       if (peerConnection && pacienteEnLlamadaActual === cedula) {
         document.getElementById('liveCallModal').style.display = 'flex';
         return;
@@ -2757,13 +2755,12 @@
       mostrarEstadoPaciente('Preparando equipo médico...');
       await prepararMediosMedico();
 
-      if (pacienteEnLlamadaActual !== cedula) return; // se cerró mientras tanto
+      if (pacienteEnLlamadaActual !== cedula) return;
 
       mostrarEstadoPaciente('Llamando al paciente... debe aceptar en la pantalla del paciente.');
       socket.emit('doctor:call-request', { cedula: cedula });
     }
 
-    /* Activa / oculta la cámara del médico sin cortar la llamada */
     async function alternarVistaMedicoEnVivo() {
       const docVid = document.getElementById('doctorLiveVideo');
       const docOverlay = document.getElementById('doctorCallOverlay');
@@ -2792,7 +2789,6 @@
       }
     }
 
-    /* Botón único para encender / apagar el micrófono del médico */
     function alternarMicrofonoMedicoEnVivo() {
       const btnMic = document.getElementById('btnToggleMedicoMic');
       const pistaAudio = streamMedicoActivo ? streamMedicoActivo.getAudioTracks()[0] : null;

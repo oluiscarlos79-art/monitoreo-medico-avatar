@@ -1,19 +1,15 @@
-const express = require("express");
+﻿const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 const app = express();
-app.set("trust proxy", 1); // Render pone un proxy delante
+app.set("trust proxy", 1);
 const server = http.createServer(app);
 
-/* ---------------------------------------------------------
-   CORS: por defecto solo mismo origen (las páginas las sirve
-   este mismo servidor). Si algún día las páginas se alojan en
-   otro dominio, define ORIGENES_PERMITIDOS="https://a.com,https://b.com"
---------------------------------------------------------- */
 const ORIGENES = (process.env.ORIGENES_PERMITIDOS || "")
   .split(",")
   .map((s) => s.trim())
@@ -26,28 +22,13 @@ if (ORIGENES.length) {
 
 const io = new Server(server, opcionesSocket);
 
-/* ---------------------------------------------------------
-   Credenciales del médico (cámbialas en Render > Environment)
-     MED_USER = usuario
-     MED_PASS = contraseña
---------------------------------------------------------- */
 const MED_USER = process.env.MED_USER || "Luis.ortega8";
 const MED_PASS = process.env.MED_PASS || "123456789";
 
-/* ---------------------------------------------------------
-   BASE DE DATOS EN EL SERVIDOR (archivo JSON)
-   Aquí viven los pacientes, terapias, sesiones, signos vitales
-   y eventos. Así cualquier dispositivo ve lo mismo.
-
-   IMPORTANTE en Render: el disco normal se borra en cada
-   reinicio/despliegue. Para que los datos NO se pierdan:
-     1) Agrega un "Disk" en Render (montado, p. ej., en /var/data)
-     2) Define la variable DATA_DIR=/var/data
---------------------------------------------------------- */
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "datos");
 const DB_FILE = path.join(DATA_DIR, "base.json");
 
-let db = { pacientes: {}, vitales: {}, eventos: {} };
+let db = { pacientes: {}, vitales: {}, eventos: {}, medicos: {} };
 
 function cargarDb() {
   try {
@@ -57,7 +38,8 @@ function cargarDb() {
       db = {
         pacientes: j.pacientes || {},
         vitales: j.vitales || {},
-        eventos: j.eventos || {}
+        eventos: j.eventos || {},
+        medicos: j.medicos || {}
       };
     }
     console.log("Base de datos cargada:", Object.keys(db.pacientes).length, "paciente(s) en", DB_FILE);
@@ -97,9 +79,6 @@ process.on("SIGINT", cerrarLimpio);
 
 cargarDb();
 
-/* ---------------------------------------------------------
-   Archivos que NO deben poder descargarse desde el navegador
---------------------------------------------------------- */
 const BLOQUEADOS = [
   /^\/server\.js$/i,
   /^\/package(-lock)?\.json$/i,
@@ -131,12 +110,6 @@ app.get("/", (req, res) => {
 
 app.get("/salud", (req, res) => res.json({ ok: true }));
 
-/* ---------------------------------------------------------
-   Servidores ICE (STUN / TURN) para WebRTC.
-     TURN_URL  = turn:servidor:3478,turns:servidor:443?transport=tcp
-     TURN_USER = usuario
-     TURN_PASS = clave
---------------------------------------------------------- */
 app.get("/api/ice", (req, res) => {
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -152,10 +125,25 @@ app.get("/api/ice", (req, res) => {
   res.json({ iceServers });
 });
 
-/* ---------------------------------------------------------
-   Utilidades
---------------------------------------------------------- */
-const tokens = new Map(); // token -> expira (ms)
+const transporter = process.env.SMTP_USER
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 465),
+      secure: Number(process.env.SMTP_PORT || 465) === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
+
+const codigosRecuperacion = new Map();
+
+function hashClave(pin) {
+  return crypto.createHash("sha256").update(String(pin)).digest("hex");
+}
+
+const tokens = new Map();
 const DURACION_TOKEN = 12 * 60 * 60 * 1000;
 
 function iguales(a, b) {
@@ -175,8 +163,7 @@ function tokenValido(t) {
   return true;
 }
 
-// Límite simple de intentos por IP
-const intentos = new Map(); // clave -> { n, desde }
+const intentos = new Map();
 function limitar(clave, max, ventanaMs) {
   const ahora = Date.now();
   const r = intentos.get(clave);
@@ -194,6 +181,9 @@ setInterval(() => {
   }
   for (const [t, exp] of tokens.entries()) {
     if (exp < ahora) tokens.delete(t);
+  }
+  for (const [mail, reg] of codigosRecuperacion.entries()) {
+    if (reg.expira < ahora) codigosRecuperacion.delete(mail);
   }
 }, 600000);
 
@@ -226,7 +216,6 @@ function fichaValida(f, cedula) {
   );
 }
 
-// Une la ficha que manda el médico con lo que el servidor ya tiene
 function guardarFicha(cedula, entrante) {
   const actual = db.pacientes[cedula] || {};
   const ficha = Object.assign({}, entrante);
@@ -257,20 +246,133 @@ function agregarEvento(cedula, ev) {
   guardarDb();
 }
 
-/* ---------------------------------------------------------
-   API del MÉDICO (requiere iniciar sesión)
---------------------------------------------------------- */
+app.post("/api/medico/registro", (req, res) => {
+  if (limitar("reg-med:" + req.ip, 10, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
+  }
+
+  const { nombre, email, especialidad, user, pin } = req.body || {};
+  const u = String(user || "").trim();
+  const mail = String(email || "").trim().toLowerCase();
+
+  if (!nombre || !mail || !u || !pin || String(pin).length < 4) {
+    return res.status(400).json({ error: "Completa todos los campos (contraseña mínimo 4 caracteres)." });
+  }
+
+  if (iguales(u, MED_USER) || db.medicos[u]) {
+    return res.status(409).json({ error: "Ese nombre de usuario ya está en uso." });
+  }
+
+  const correoExiste = Object.values(db.medicos).some((m) => m.email === mail);
+  if (correoExiste) {
+    return res.status(409).json({ error: "Ya existe una cuenta registrada con ese correo." });
+  }
+
+  db.medicos[u] = {
+    nombre: textoCorto(nombre, 80),
+    email: textoCorto(mail, 100),
+    especialidad: textoCorto(especialidad, 100),
+    user: u,
+    pinHash: hashClave(pin),
+    creadoEn: new Date().toISOString()
+  };
+  guardarDb();
+
+  res.json({ ok: true });
+});
+
 app.post("/api/medico/login", (req, res) => {
   if (limitar("med:" + req.ip, 8, 10 * 60 * 1000)) {
     return res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
   }
   const { user, pin } = req.body || {};
-  if (iguales(user || "", MED_USER) && iguales(pin || "", MED_PASS)) {
+  const u = String(user || "").trim();
+  const p = String(pin || "").trim();
+
+  const esAdmin = iguales(u, MED_USER) && iguales(p, MED_PASS);
+  const medReg = db.medicos[u];
+  const esMedicoValido = medReg && iguales(medReg.pinHash, hashClave(p));
+
+  if (esAdmin || esMedicoValido) {
     const token = crypto.randomBytes(24).toString("hex");
     tokens.set(token, Date.now() + DURACION_TOKEN);
     return res.json({ token });
   }
   res.status(401).json({ error: "Credenciales inválidas" });
+});
+
+app.post("/api/medico/recuperar-password", async (req, res) => {
+  if (limitar("rec-med:" + req.ip, 6, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: "Demasiadas solicitudes. Espera unos minutos." });
+  }
+
+  const mail = String((req.body && req.body.email) || "").trim().toLowerCase();
+  const medico = Object.values(db.medicos).find((m) => m.email === mail);
+
+  if (!medico) {
+    return res.status(404).json({ error: "No se encontró ninguna cuenta médica asociada a ese correo." });
+  }
+
+  const codigo = String(crypto.randomInt(100000, 999999));
+  codigosRecuperacion.set(mail, {
+    codigo,
+    user: medico.user,
+    expira: Date.now() + 15 * 60 * 1000
+  });
+
+  if (!transporter) {
+    console.log(`[SIMULACIÓN CORREO] Código de recuperación para ${mail} (usuario: ${medico.user}): ${codigo}`);
+    return res.json({
+      ok: true,
+      requiereCodigo: true,
+      mensaje: "Código generado (configura SMTP_USER y SMTP_PASS en Render para envío real). Revisa los logs del servidor."
+    });
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"Portal Médico UAC" <${process.env.SMTP_USER}>`,
+      to: mail,
+      subject: "Recuperación de contraseña — Portal Médico UAC",
+      text: `Hola ${medico.nombre},\n\nTu usuario registrado es: ${medico.user}\nTu código de verificación para restablecer tu contraseña es: ${codigo}\n\nEste código expira en 15 minutos.`
+    });
+
+    res.json({
+      ok: true,
+      requiereCodigo: true,
+      mensaje: `✅ Se envió un código de verificación a ${mail}. Ingrésalo abajo para crear tu nueva contraseña.`
+    });
+  } catch (err) {
+    console.error("Error enviando correo:", err);
+    res.status(500).json({ error: "No se pudo enviar el correo. Verifica la configuración SMTP del servidor." });
+  }
+});
+
+app.post("/api/medico/restablecer-password", (req, res) => {
+  const mail = String((req.body && req.body.email) || "").trim().toLowerCase();
+  const codigo = String((req.body && req.body.codigo) || "").trim();
+  const nuevaClave = String((req.body && req.body.nuevaClave) || "").trim();
+
+  const registro = codigosRecuperacion.get(mail);
+  if (!registro || registro.expira < Date.now() || registro.codigo !== codigo) {
+    return res.status(400).json({ error: "El código es inválido o ha expirado." });
+  }
+
+  if (nuevaClave.length < 4) {
+    return res.status(400).json({ error: "La nueva contraseña debe tener al menos 4 caracteres." });
+  }
+
+  if (db.medicos[registro.user]) {
+    db.medicos[registro.user].pinHash = hashClave(nuevaClave);
+    guardarDb();
+  }
+  codigosRecuperacion.delete(mail);
+
+  res.json({
+    ok: true,
+    user: registro.user,
+    mensaje: "✅ Contraseña actualizada. Ya puedes iniciar sesión."
+  });
 });
 
 app.get("/api/pacientes", requiereMedico, (req, res) => {
@@ -285,7 +387,6 @@ app.put("/api/pacientes/:cedula", requiereMedico, (req, res) => {
   res.json(ficha);
 });
 
-// Migración: sube pacientes que estaban solo en el navegador del médico
 app.post("/api/pacientes/importar", requiereMedico, (req, res) => {
   const lista = Array.isArray(req.body) ? req.body : [];
   let nuevos = 0;
@@ -325,9 +426,6 @@ app.get("/api/pacientes/:cedula/historial", requiereMedico, (req, res) => {
   });
 });
 
-/* ---------------------------------------------------------
-   API del PACIENTE (entra con su cédula)
---------------------------------------------------------- */
 app.post("/api/paciente/login", (req, res) => {
   if (limitar("pac:" + req.ip, 40, 10 * 60 * 1000)) {
     return res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
@@ -336,18 +434,14 @@ app.post("/api/paciente/login", (req, res) => {
   const ficha = cedula ? db.pacientes[cedula] : null;
   if (!ficha) return res.status(404).json({ error: "No encontrado" });
 
-  // El paciente no recibe los apuntes privados del médico
   const copia = Object.assign({}, ficha);
   delete copia.apuntesMedico;
   res.set("Cache-Control", "no-store");
   res.json(copia);
 });
 
-/* ---------------------------------------------------------
-   Estado en memoria (conexiones en vivo)
---------------------------------------------------------- */
-const pacientes = new Map(); // cedula -> { socketId, nombre }
-const llamadas = new Map(); //  cedula -> socketId del médico que llama
+const pacientes = new Map();
+const llamadas = new Map();
 
 function listaEnLinea() {
   return [...pacientes.entries()].map(([cedula, p]) => ({
@@ -373,8 +467,6 @@ function socketVivo(id) {
 io.on("connection", (socket) => {
   console.log("Conectado:", socket.id);
 
-  /* ---------- Registro ---------- */
-
   socket.on("patient:join", (data = {}) => {
     const cedula = String(data.cedula || "").trim();
     if (!cedula) return;
@@ -397,7 +489,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("doctor:join", () => {
-    // Solo entra un médico con sesión válida
     const token = socket.handshake.auth && socket.handshake.auth.token;
     if (!tokenValido(token)) {
       socket.emit("server:auth-error");
@@ -413,8 +504,6 @@ io.on("connection", (socket) => {
     console.log("Médico conectado:", socket.id);
   });
 
-  /* ---------- Paciente -> todos los médicos (datos en vivo) ---------- */
-
   const eventosHaciaMedicos = [
     "patient:state",
     "patient:movement",
@@ -428,7 +517,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // SOS: se reenvía y además queda en el registro del paciente
   socket.on("patient:sos", (data = {}) => {
     if (socket.data.tipo !== "paciente" || !socket.data.cedula) return;
     const cedula = socket.data.cedula;
@@ -436,7 +524,6 @@ io.on("connection", (socket) => {
     if (db.pacientes[cedula]) agregarEvento(cedula, { tipo: "SOS", detalle: "El paciente solicitó ayuda médica" });
   });
 
-  // Signos vitales: se guardan en el servidor y se reenvían al médico
   socket.on("patient:vitals", (data = {}) => {
     if (socket.data.tipo !== "paciente" || !socket.data.cedula) return;
     const cedula = socket.data.cedula;
@@ -480,7 +567,6 @@ io.on("connection", (socket) => {
     io.to("medicos").emit("patient:vitals", { ...registro, cedula });
   });
 
-  // Sesión terminada: se guarda en el servidor y se avisa al médico
   socket.on("patient:session-completed", (data = {}) => {
     if (socket.data.tipo !== "paciente" || !socket.data.cedula) return;
     const cedula = socket.data.cedula;
@@ -498,8 +584,6 @@ io.on("connection", (socket) => {
 
     io.to("medicos").emit("patient:session-completed", sesion);
   });
-
-  /* ---------- Paciente -> el médico de SU llamada ---------- */
 
   const eventosLlamadaHaciaMedico = [
     "patient:call-accepted",
@@ -525,8 +609,6 @@ io.on("connection", (socket) => {
       }
     });
   });
-
-  /* ---------- Médico -> paciente ---------- */
 
   socket.on("doctor:call-request", (data = {}) => {
     if (socket.data.tipo !== "medico") return;
@@ -566,7 +648,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // El médico habilita, bloquea o programa las terapias del paciente
   socket.on("doctor:terapias", (data = {}) => {
     if (socket.data.tipo !== "medico") return;
 
@@ -591,8 +672,6 @@ io.on("connection", (socket) => {
 
     io.to(`paciente:${cedula}`).emit("doctor:alert-acknowledged", data);
   });
-
-  /* ---------- Desconexión ---------- */
 
   socket.on("disconnect", () => {
     const cedula = socket.data.cedula;
