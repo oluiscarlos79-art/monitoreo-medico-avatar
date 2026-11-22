@@ -2790,26 +2790,76 @@
       const docOverlay = document.getElementById('doctorCallOverlay');
       const btnToggle = document.getElementById('btnToggleMedicoCam');
 
-      const pista = streamMedicoActivo ? streamMedicoActivo.getVideoTracks()[0] : null;
+      let pista = streamMedicoActivo ? streamMedicoActivo.getVideoTracks()[0] : null;
 
       if (!pista) {
-        alert('Este equipo no tiene cámara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
-        return;
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Este equipo no tiene c?mara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
+            return;
+          }
+          const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          pista = camStream.getVideoTracks()[0];
+          if (!pista) {
+            alert('Este equipo no tiene c?mara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
+            return;
+          }
+          pista.enabled = true;
+          if (!streamMedicoActivo) {
+            streamMedicoActivo = new MediaStream([pista]);
+          } else {
+            streamMedicoActivo.getVideoTracks().forEach(t => streamMedicoActivo.removeTrack(t));
+            streamMedicoActivo.addTrack(pista);
+          }
+          if (docVid) {
+            docVid.srcObject = streamMedicoActivo;
+            docVid.play().catch(() => {});
+          }
+          if (typeof pc !== 'undefined' && pc && pc.signalingState !== 'closed') {
+            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (videoSender && videoSender.replaceTrack) {
+              videoSender.replaceTrack(pista).catch(() => {});
+            } else {
+              pc.addTrack(pista, streamMedicoActivo);
+            }
+          }
+          if (docVid) docVid.style.display = 'block';
+          if (docOverlay) docOverlay.style.display = 'none';
+          if (btnToggle) {
+            btnToggle.innerText = '?? Apagar C?mara M?dico';
+            btnToggle.className = 'btn-call';
+          }
+          return;
+        } catch (err) {
+          console.error('Error al activar c?mara del m?dico:', err);
+          alert('Este equipo no tiene c?mara disponible (o no se dio el permiso). Puedes ver y escuchar al paciente sin enviar video.');
+          return;
+        }
       }
 
       pista.enabled = !pista.enabled;
 
       if (pista.enabled) {
-        docVid.style.display = 'block';
-        docOverlay.style.display = 'none';
-        btnToggle.innerText = '📹 Apagar Cámara Médico';
-        btnToggle.className = 'btn-call';
+        if (docVid) {
+          if (!docVid.srcObject && streamMedicoActivo) docVid.srcObject = streamMedicoActivo;
+          docVid.style.display = 'block';
+          docVid.play().catch(() => {});
+        }
+        if (docOverlay) docOverlay.style.display = 'none';
+        if (btnToggle) {
+          btnToggle.innerText = '?? Apagar C?mara M?dico';
+          btnToggle.className = 'btn-call';
+        }
       } else {
-        docVid.style.display = 'none';
-        docOverlay.style.display = 'block';
-        docOverlay.innerHTML = '<p>Cámara médica apagada.<br>Haz clic en <strong>"Encender Cámara Médico"</strong>.</p>';
-        btnToggle.innerText = '📹 Encender Cámara Médico';
-        btnToggle.className = 'btn-secondary';
+        if (docVid) docVid.style.display = 'none';
+        if (docOverlay) {
+          docOverlay.style.display = 'block';
+          docOverlay.innerHTML = '<p>C?mara m?dica apagada.<br>Haz clic en <strong>"Encender C?mara M?dico"</strong>.</p>';
+        }
+        if (btnToggle) {
+          btnToggle.innerText = '?? Encender C?mara M?dico';
+          btnToggle.className = 'btn-secondary';
+        }
       }
     }
 
