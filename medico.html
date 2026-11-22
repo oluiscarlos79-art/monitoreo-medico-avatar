@@ -1072,6 +1072,21 @@
   </div>
 
   <script>
+    function __alternarTracksLocales(tipo) {
+      const stream = (typeof localStream !== 'undefined' && localStream)
+        || (typeof streamLocal !== 'undefined' && streamLocal)
+        || (typeof medicoStream !== 'undefined' && medicoStream)
+        || (typeof streamMedico !== 'undefined' && streamMedico)
+        || (window.__obtenerStreamMedico && window.__obtenerStreamMedico());
+      if (!stream) return null;
+      const tracks = tipo === 'audio' ? stream.getAudioTracks() : stream.getVideoTracks();
+      if (!tracks || !tracks.length) return null;
+      const nuevoEstado = !tracks[0].enabled;
+      tracks.forEach(t => { t.enabled = nuevoEstado; });
+      return nuevoEstado;
+    }
+  
+
     let socket = null;
     let streamMedicoActivo = null;
     let streamPaciente = null;
@@ -2873,6 +2888,38 @@
           el.play().catch(() => {});
         }
       }, { passive: true });
+    })();
+  </script>
+  <script>
+    (function() {
+      if (window.__envioAudioLocalPatched) return;
+      window.__envioAudioLocalPatched = true;
+
+      // Helper para encontrar el stream local del m?dico si existe en variables comunes
+      window.__obtenerStreamMedico = function() {
+        const candidatos = ['localStream', 'streamLocal', 'medicoStream', 'streamMedico', 'myStream', 'miStream'];
+        for (const k of candidatos) {
+          if (window[k] && typeof window[k].getTracks === 'function') return window[k];
+        }
+        return null;
+      };
+
+      // Parchear RTCPeerConnection para garantizar que las pistas de audio/video locales se env?en
+      const origRTC = window.RTCPeerConnection;
+      if (origRTC && !origRTC.__localTracksEnsured) {
+        window.RTCPeerConnection = function(...args) {
+          const pc = new origRTC(...args);
+          const origAddTrack = pc.addTrack.bind(pc);
+          pc.addTrack = function(track, ...streams) {
+            if (track && track.kind === 'audio') track.enabled = true;
+            return origAddTrack(track, ...streams);
+          };
+          return pc;
+        };
+        window.RTCPeerConnection.prototype = origRTC.prototype;
+        Object.setPrototypeOf(window.RTCPeerConnection, origRTC);
+        window.RTCPeerConnection.__localTracksEnsured = true;
+      }
     })();
   </script>
 </body>
