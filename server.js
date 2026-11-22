@@ -277,7 +277,7 @@ app.post("/api/medico/registro", (req, res) => {
     pinHash: hashClave(pin),
     creadoEn: new Date().toISOString()
   };
-  guardarDb();
+  escribirDbYa();
 
   if (transporter) {
     transporter.sendMail({
