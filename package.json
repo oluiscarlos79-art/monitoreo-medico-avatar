@@ -21,6 +21,7 @@
   "homepage": "https://github.com/oluiscarlos79-art/monitoreo-medico-avatar#readme",
   "dependencies": {
     "express": "^5.3.0",
+    "nodemailer": "^10.6.1",
     "socket.io": "^4.8.4"
   }
 }
