@@ -1489,7 +1489,7 @@
     function cerrarConexionWebRTC() {
       const aud = document.getElementById('patientRemoteAudio');
       if (aud) { aud.srcObject = null; }
-      const aud = document.getElementById('patientRemoteAudio');
+      const audRemoto = document.getElementById('patientRemoteAudio');
       if (aud) { aud.srcObject = null; }
       if (peerConnection) {
         peerConnection.ontrack = null;
@@ -1555,7 +1555,7 @@
           if (!streamPaciente) streamPaciente = new MediaStream();
           streamPaciente.addTrack(event.track);
           if (event.track.kind === 'audio') {
-            let aud = document.getElementById('patientRemoteAudio');
+            let audRemoto = document.getElementById('patientRemoteAudio');
             if (!aud) {
               aud = document.createElement('audio');
               aud.id = 'patientRemoteAudio';
@@ -1572,7 +1572,7 @@
             aud.play().catch((e) => console.warn('Reproducci?n de audio bloqueada hasta interacci?n:', e));
           }
           if (event.track.kind === 'audio') {
-            let aud = document.getElementById('patientRemoteAudio');
+            let audRemoto = document.getElementById('patientRemoteAudio');
             if (!aud) {
               aud = document.createElement('audio');
               aud.id = 'patientRemoteAudio';
