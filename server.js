@@ -1,3 +1,4 @@
+try { require('fs').readFileSync(require('path').join(__dirname, '.env'), 'utf8').split(/\r?\n/).forEach(l => { const m = l.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = (m[2] || '').replace(/^['"]|['"]$/g, ''); }); } catch(e) {}
 ﻿const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
