@@ -1,5 +1,5 @@
 try { require('fs').readFileSync(require('path').join(__dirname, '.env'), 'utf8').split(/\r?\n/).forEach(l => { const m = l.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = (m[2] || '').replace(/^['"]|['"]$/g, ''); }); } catch(e) {}
-﻿const express = require("express");
+const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
@@ -23,8 +23,16 @@ if (ORIGENES.length) {
 
 const io = new Server(server, opcionesSocket);
 
-const MED_USER = process.env.MED_USER || "Luis.ortega8";
-const MED_PASS = process.env.MED_PASS || "123456789";
+const MED_USER = process.env.MED_USER || "";
+const MED_PASS = process.env.MED_PASS || "";
+const REGISTRO_CODIGO = process.env.REGISTRO_CODIGO || "";
+
+if (!MED_USER || !MED_PASS) {
+  console.warn("Aviso: no hay administrador por variables de entorno (MED_USER / MED_PASS). Solo podrán ingresar los médicos registrados.");
+}
+if (!REGISTRO_CODIGO) {
+  console.warn("Aviso: el registro de médicos es abierto. Define REGISTRO_CODIGO para exigir un código de invitación.");
+}
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "datos");
 const DB_FILE = path.join(DATA_DIR, "base.json");
@@ -86,6 +94,7 @@ const BLOQUEADOS = [
   /^\/node_modules(\/|$)/i,
   /^\/datos(\/|$)/i,
   /^\/\./,
+  /^\/_(env|gitignore|gitattributes)(\..*)?$/i,
   /\.blend1?$/i
 ];
 
@@ -139,6 +148,15 @@ const transporter = process.env.SMTP_USER
   : null;
 
 const codigosRecuperacion = new Map();
+
+function escaparHtml(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function hashClave(pin) {
   return crypto.createHash("sha256").update(String(pin)).digest("hex");
@@ -252,15 +270,23 @@ app.post("/api/medico/registro", (req, res) => {
     return res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
   }
 
-  const { nombre, email, especialidad, user, pin } = req.body || {};
+  const { nombre, email, especialidad, user, pin, codigoInvitacion } = req.body || {};
   const u = String(user || "").trim();
+
+  if (REGISTRO_CODIGO && !iguales(String(codigoInvitacion || "").trim(), REGISTRO_CODIGO)) {
+    return res.status(403).json({ error: "El código de invitación no es válido." });
+  }
   const mail = String(email || "").trim().toLowerCase();
 
   if (!nombre || !mail || !u || !pin || String(pin).length < 4) {
     return res.status(400).json({ error: "Completa todos los campos (contraseña mínimo 4 caracteres)." });
   }
 
-  if (iguales(u, MED_USER) || db.medicos[u]) {
+  if (["__proto__", "constructor", "prototype"].includes(u)) {
+    return res.status(400).json({ error: "Ese nombre de usuario no está permitido." });
+  }
+
+  if ((MED_USER && iguales(u, MED_USER)) || Object.prototype.hasOwnProperty.call(db.medicos, u)) {
     return res.status(409).json({ error: "Ese nombre de usuario ya está en uso." });
   }
 
@@ -279,25 +305,27 @@ app.post("/api/medico/registro", (req, res) => {
   };
   escribirDbYa();
 
+  const medicoNuevo = db.medicos[u];
   if (transporter) {
+    const espec = medicoNuevo.especialidad || "General";
     transporter.sendMail({
-      from: `"Portal M?dico UAC" <${process.env.SMTP_USER}>`,
+      from: `"Portal Médico UAC" <${process.env.SMTP_USER}>`,
       to: mail,
-      subject: "Bienvenido(a) al Portal M?dico UAC ? Cuenta creada",
-      text: `Hola ${db.medicos[u].nombre},\n\n?Bienvenido(a) al Portal M?dico de Telemedicina UAC!\n\nTu cuenta ha sido creada exitosamente:\n- Usuario: ${u}\n- Correo: ${mail}\n- Especialidad: ${db.medicos[u].especialidad || 'General'}\n\nYa puedes iniciar sesi?n en la plataforma.`,
+      subject: "Bienvenido(a) al Portal Médico UAC — Cuenta creada",
+      text: `Hola ${medicoNuevo.nombre},\n\n¡Bienvenido(a) al Portal Médico de Telemedicina UAC!\n\nTu cuenta ha sido creada exitosamente:\n- Usuario: ${u}\n- Correo: ${mail}\n- Especialidad: ${espec}\n\nYa puedes iniciar sesión en la plataforma.`,
       html: `<div style="font-family:sans-serif;max-width:500px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">
-        <h2 style="color:#0f62fe;margin-top:0;">?Bienvenido(a), ${db.medicos[u].nombre}!</h2>
-        <p>Tu cuenta en el <strong>Portal M?dico de Telemedicina UAC</strong> ha sido creada exitosamente.</p>
+        <h2 style="color:#0f62fe;margin-top:0;">¡Bienvenido(a), ${escaparHtml(medicoNuevo.nombre)}!</h2>
+        <p>Tu cuenta en el <strong>Portal Médico de Telemedicina UAC</strong> ha sido creada exitosamente.</p>
         <div style="background:#f8fafc;padding:14px;border-radius:8px;margin:16px 0;border:1px solid #e2e8f0;">
-          <p style="margin:4px 0;"><strong>Usuario:</strong> ${u}</p>
-          <p style="margin:4px 0;"><strong>Correo:</strong> ${mail}</p>
-          <p style="margin:4px 0;"><strong>Especialidad:</strong> ${db.medicos[u].especialidad || 'General'}</p>
+          <p style="margin:4px 0;"><strong>Usuario:</strong> ${escaparHtml(u)}</p>
+          <p style="margin:4px 0;"><strong>Correo:</strong> ${escaparHtml(mail)}</p>
+          <p style="margin:4px 0;"><strong>Especialidad:</strong> ${escaparHtml(espec)}</p>
         </div>
-        <p style="font-size:13px;color:#64748b;">Ya puedes iniciar sesi?n para gestionar tus pacientes, historias cl?nicas y sesiones de terapia en vivo.</p>
+        <p style="font-size:13px;color:#64748b;">Ya puedes iniciar sesión para gestionar tus pacientes, historias clínicas y sesiones de terapia en vivo.</p>
       </div>`
-    }).catch(err => console.error("Error enviando correo de bienvenida:", err.message));
+    }).catch((err) => console.error("Error enviando correo de bienvenida:", err.message));
   } else {
-    console.log(`[SIMULACI?N BIENVENIDA] Cuenta creada para ${db.medicos[u].nombre} (${mail}) | Usuario: ${u}`);
+    console.log(`[SIMULACIÓN BIENVENIDA] Cuenta creada para ${medicoNuevo.nombre} (${mail}) | Usuario: ${u}`);
   }
 
   res.json({ ok: true });
@@ -311,8 +339,8 @@ app.post("/api/medico/login", (req, res) => {
   const u = String(user || "").trim();
   const p = String(pin || "").trim();
 
-  const esAdmin = iguales(u, MED_USER) && iguales(p, MED_PASS);
-  const medReg = db.medicos[u];
+  const esAdmin = !!MED_USER && !!MED_PASS && iguales(u, MED_USER) && iguales(p, MED_PASS);
+  const medReg = Object.prototype.hasOwnProperty.call(db.medicos, u) ? db.medicos[u] : null;
   const esMedicoValido = medReg && iguales(medReg.pinHash, hashClave(p));
 
   if (esAdmin || esMedicoValido) {
@@ -371,6 +399,9 @@ app.post("/api/medico/recuperar-password", async (req, res) => {
 });
 
 app.post("/api/medico/restablecer-password", (req, res) => {
+  if (limitar("rest-med:" + req.ip, 10, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
+  }
   const mail = String((req.body && req.body.email) || "").trim().toLowerCase();
   const codigo = String((req.body && req.body.codigo) || "").trim();
   const nuevaClave = String((req.body && req.body.nuevaClave) || "").trim();
