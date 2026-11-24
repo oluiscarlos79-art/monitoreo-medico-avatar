@@ -32,25 +32,26 @@
   };
 </script>
 
+<link rel="stylesheet" href="/uac-theme.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;background:#1a1a2e;color:white;min-height:100vh;overflow-x:hidden}
+body{font-family:var(--font-ui);background:var(--bg-page);color:var(--text-main);min-height:100vh;overflow-x:hidden}
 
 #patientLoginSection{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-#patientLogin{width:100%;max-width:420px;background:#141422;padding:35px;border-radius:12px;border:1px solid rgba(0,210,106,.3)}
+#patientLogin{width:100%;max-width:420px;background:var(--bg-card);padding:35px;border-radius:12px;border:1px solid rgba(69,137,255,.3)}
 .form-group{margin-bottom:14px}
-label{display:block;font-size:.78rem;color:#a0a0c0;margin-bottom:4px}
-input{width:100%;padding:10px;background:#1a1a2e;border:1px solid #303050;color:white;border-radius:6px;font-size:.9rem}
+label{display:block;font-size:.78rem;color:var(--text-muted);margin-bottom:4px}
+input{width:100%;padding:10px;background:var(--bg-subtle);border:1px solid var(--border-strong);color:white;border-radius:6px;font-size:.9rem}
 button{cursor:pointer}
-button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weight:bold;border-radius:6px;width:100%}
+button.main-btn{background:var(--primary);color:#fff;border:0;padding:10px;font-weight:bold;border-radius:6px;width:100%}
 .error-msg{color:#ff4d4d;font-size:.78rem;margin-top:8px;display:none;text-align:center}
 
 #patientAppContainer{width:100vw;height:100vh;overflow:hidden;display:none;position:relative}
-.left-panel{width:50%;height:100vh;position:relative;background:#141422;border-right:2px solid rgba(0,210,106,.3);display:flex;flex-direction:column}
+.left-panel{width:50%;height:100vh;position:relative;background:var(--bg-card);border-right:2px solid rgba(69,137,255,.3);display:flex;flex-direction:column}
 .avatar-container{width:100%;flex:1;min-height:0;position:relative}
 #avatarCanvas{width:100%;height:100%;display:block}
-.right-panel{width:50%;height:100vh;position:relative;background:#0f0f1b;display:flex;flex-direction:column;overflow-y:auto}
-.video-stage{position:relative;width:100%;height:75vh;flex-shrink:0;border-bottom:2px solid rgba(0,210,106,.3);overflow:hidden;background:#080810}
+.right-panel{width:50%;height:100vh;position:relative;background:var(--bg-page);display:flex;flex-direction:column;overflow-y:auto}
+.video-stage{position:relative;width:100%;height:75vh;flex-shrink:0;border-bottom:2px solid rgba(69,137,255,.3);overflow:hidden;background:#080810}
 .video-stage video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
 #poseCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;transform:scaleX(-1);z-index:15}
 .right-content{padding:8px 12px;flex:1;display:flex;flex-direction:column;gap:6px}
@@ -73,24 +74,24 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .btn-skip-rest{background:rgba(56,189,248,.2);color:#7dd3fc;border:1px solid #38bdf8;padding:6px 14px;border-radius:6px;font-size:.73rem;font-weight:bold}
 .btn-skip-rest:hover{background:rgba(56,189,248,.35)}
 
-.telemetry-panel{position:absolute;top:15px;left:15px;background:rgba(15,15,27,.9);padding:8px 12px;border-radius:8px;z-index:10;min-width:205px;border:1px solid rgba(0,210,106,.2)}
-.telemetry-title{font-size:.75rem;font-weight:bold;margin-bottom:4px;color:#00d26a;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:2px}
+.telemetry-panel{position:absolute;top:15px;left:15px;background:rgba(11,17,30,.9);padding:8px 12px;border-radius:8px;z-index:10;min-width:205px;border:1px solid rgba(69,137,255,.2)}
+.telemetry-title{font-size:.75rem;font-weight:bold;margin-bottom:4px;color:var(--primary);border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:2px}
 .telemetry-item{display:flex;justify-content:space-between;margin-bottom:3px;font-size:.75rem;gap:8px}
-.telemetry-label{color:#a0a0c0}
+.telemetry-label{color:var(--text-muted)}
 .telemetry-value{font-weight:bold;color:white}
 
 .movement-switcher{display:none!important}
-.movement-switcher-title{font-size:.66rem;color:#00d26a;font-weight:bold;text-transform:uppercase}
+.movement-switcher-title{font-size:.66rem;color:var(--primary);font-weight:bold;text-transform:uppercase}
 .movement-status-sub{font-size:.66rem;color:#e2e8f0;margin-bottom:2px}
-.movement-btn{background:#1a1a2e;color:#e2e8f0;border:1px solid #303050;padding:4px 7px;border-radius:5px;font-size:.65rem;font-weight:bold;text-align:left}
-.movement-btn.active{background:rgba(0,210,106,.22);border-color:#00d26a;color:#00d26a}
+.movement-btn{background:var(--bg-subtle);color:#e2e8f0;border:1px solid var(--border-strong);padding:4px 7px;border-radius:5px;font-size:.65rem;font-weight:bold;text-align:left}
+.movement-btn.active{background:rgba(69,137,255,.22);border-color:var(--primary);color:var(--primary)}
 
-.precision-panel{position:absolute;bottom:15px;left:15px;background:rgba(15,15,27,.92);padding:8px 14px;border-radius:8px;border-left:4px solid #00d26a;border-top:1px solid rgba(0,210,106,.25);border-right:1px solid rgba(0,210,106,.25);border-bottom:1px solid rgba(0,210,106,.25);z-index:10;max-width:340px;transition:border-color .2s,background-color .2s}
+.precision-panel{position:absolute;bottom:15px;left:15px;background:rgba(11,17,30,.92);padding:8px 14px;border-radius:8px;border-left:4px solid var(--primary);border-top:1px solid rgba(69,137,255,.25);border-right:1px solid rgba(69,137,255,.25);border-bottom:1px solid rgba(69,137,255,.25);z-index:10;max-width:340px;transition:border-color .2s,background-color .2s}
 .precision-panel.estado-bien{border-left-color:#10b981;border-color:#10b981;background:rgba(16,185,129,.18)}
 .precision-panel.estado-mal{border-left-color:#ef4444;border-color:#ef4444;background:rgba(239,68,68,.22)}
 .precision-panel.estado-descanso{border-left-color:#38bdf8;border-color:#38bdf8;background:rgba(56,189,248,.16)}
-.precision-title{font-size:.7rem;color:#a0a0c0;text-transform:uppercase}
-.precision-value{font-size:1.4rem;font-weight:bold;color:#00d26a;transition:color .2s}
+.precision-title{font-size:.7rem;color:var(--text-muted);text-transform:uppercase}
+.precision-value{font-size:1.4rem;font-weight:bold;color:var(--primary);transition:color .2s}
 .precision-panel.estado-bien .precision-value{color:#10b981}
 .precision-panel.estado-mal .precision-value{color:#ef4444}
 .precision-panel.estado-descanso .precision-value{color:#38bdf8}
@@ -99,37 +100,37 @@ button.main-btn{background:#00d26a;color:#0f0f1b;border:0;padding:10px;font-weig
 .precision-panel.estado-mal .count-badge-estado{background:rgba(239,68,68,.25);color:#fca5a5;border-color:rgba(239,68,68,.6)}
 .precision-panel.estado-descanso .count-badge-estado{background:rgba(56,189,248,.25);color:#7dd3fc;border-color:rgba(56,189,248,.6)}
 .feedback-text{font-size:.72rem;color:#e0e0e0;margin-top:4px}
-.btn-manual-start{background:#00d26a;color:#0f0f1b;border:0;padding:6px 10px;font-size:.72rem;font-weight:bold;border-radius:5px;margin-top:5px}
+.btn-manual-start{background:var(--primary);color:#fff;border:0;padding:6px 10px;font-size:.72rem;font-weight:bold;border-radius:5px;margin-top:5px}
 
-.uac-logo-container{position:absolute;top:12px;right:15px;z-index:20;background:rgba(15,15,27,.88);padding:6px 12px;border-radius:10px;display:flex;align-items:center;border:1px solid rgba(0,210,106,.4)}
+.uac-logo-container{position:absolute;top:12px;right:15px;z-index:20;background:rgba(11,17,30,.88);padding:6px 12px;border-radius:10px;display:flex;align-items:center;border:1px solid rgba(69,137,255,.4)}
 .uac-logo-container img{height:46px;width:auto;object-fit:contain}
 
-.card{background:#141422;padding:6px 10px;border-radius:6px;border:1px solid #303050}
-.card h3{font-size:.72rem;color:#00d26a;text-transform:uppercase;margin-bottom:3px}
+.card{background:var(--bg-card);padding:6px 10px;border-radius:6px;border:1px solid var(--border-strong)}
+.card h3{font-size:.72rem;color:var(--primary);text-transform:uppercase;margin-bottom:3px}
 .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:.7rem}
-.info-label{color:#a0a0c0;font-size:.6rem;text-transform:uppercase}
+.info-label{color:var(--text-muted);font-size:.6rem;text-transform:uppercase}
 .info-value{font-weight:bold;color:white}
 
 .days-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:4px;max-height:150px;overflow-y:auto;padding-right:2px}
-.day-card{background:#1a1a2e;border:1px solid #303050;padding:4px;border-radius:5px;text-align:center;cursor:not-allowed;opacity:.5}
+.day-card{background:var(--bg-subtle);border:1px solid var(--border-strong);padding:4px;border-radius:5px;text-align:center;cursor:not-allowed;opacity:.5}
 .day-card.unlocked{opacity:1;cursor:pointer}
-.day-state{font-size:.58rem;color:#a0a0c0;margin-top:2px}
+.day-state{font-size:.58rem;color:var(--text-muted);margin-top:2px}
 body.espejo *{pointer-events:none!important}
 body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-switcher,body.espejo #vozEstado,body.espejo #avisoMedico,body.espejo #doctorEmergencyPanel,body.espejo #connectionStatus,body.espejo #callStatus,body.espejo #mqttStatus{display:none!important}
-.day-card.unlocked:hover{border-color:#00d26a;background:rgba(0,210,106,.05)}
-.day-card.active{border-color:#00d26a;background:rgba(0,210,106,.18);opacity:1}
-.day-num{font-weight:bold;color:#00d26a;font-size:.68rem}
-.day-date{font-size:.58rem;color:#a0a0c0;margin-top:1px}
+.day-card.unlocked:hover{border-color:var(--primary);background:rgba(69,137,255,.05)}
+.day-card.active{border-color:var(--primary);background:rgba(69,137,255,.18);opacity:1}
+.day-num{font-weight:bold;color:var(--primary);font-size:.68rem}
+.day-date{font-size:.58rem;color:var(--text-muted);margin-top:1px}
 
-.ai-speech-bubble{background:rgba(15,15,27,.9);border:1px solid #00d26a;padding:5px 8px;border-radius:8px}
-.ai-speech-header{font-size:.62rem;color:#00d26a;font-weight:bold;margin-bottom:1px;text-transform:uppercase}
+.ai-speech-bubble{background:rgba(11,17,30,.9);border:1px solid var(--primary);padding:5px 8px;border-radius:8px}
+.ai-speech-header{font-size:.62rem;color:var(--primary);font-weight:bold;margin-bottom:1px;text-transform:uppercase}
 .ai-speech-text{font-size:.73rem;color:white;line-height:1.3}
 
-#loadingOverlay{position:absolute;inset:0;background:rgba(20,20,34,.92);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:50;transition:opacity .5s}
-.spinner{width:35px;height:35px;border:3px solid rgba(0,210,106,.2);border-top:3px solid #00d26a;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:8px}
+#loadingOverlay{position:absolute;inset:0;background:rgba(11,17,30,.92);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:50;transition:opacity .5s}
+.spinner{width:35px;height:35px;border:3px solid rgba(69,137,255,.2);border-top:3px solid var(--primary);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#doctorEmergencyPanel{display:none;position:absolute;top:15px;right:15px;width:320px;max-height:420px;background:#0f0f1b;z-index:35;flex-direction:column;border:1px solid #ff4d4d;border-radius:8px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.5)}
+#doctorEmergencyPanel{display:none;position:absolute;top:15px;right:15px;width:320px;max-height:420px;background:var(--bg-page);z-index:35;flex-direction:column;border:1px solid #ff4d4d;border-radius:8px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.5)}
 #doctorEmergencyPanel.active{display:flex}
 .doctor-video-header{background:rgba(255,77,77,.25);color:#ff4d4d;border-bottom:1px solid #ff4d4d;font-size:.72rem;padding:8px 10px;font-weight:bold;display:flex;flex-direction:column;gap:4px}
 #doctorRemoteVideo{width:100%;height:180px;object-fit:cover;background:#000}
@@ -140,7 +141,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
 .exit-btn{background:transparent;color:#ff6b6b;border:1px solid #ff6b6b}
 
 #connectionStatus{font-size:.65rem;color:#ffd166;margin-top:3px}
-#callStatus{font-size:.7rem;color:#00d26a;margin-top:3px}
+#callStatus{font-size:.7rem;color:var(--primary);margin-top:3px}
 
 @media(max-width:750px){
  #patientAppContainer{height:auto;min-height:100vh;overflow:visible;flex-direction:column}
@@ -161,7 +162,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
    <h1 style="font-size:1.5rem">Acceso Paciente UAC</h1>
   </div>
 
-  <p style="font-size:.82rem;color:#a0a0c0;margin-bottom:18px;text-align:center;line-height:1.4">
+  <p style="font-size:.82rem;color:#94a3b8;margin-bottom:18px;text-align:center;line-height:1.4">
    Bienvenido a tu espacio de recuperación UAC. Digita tu documento para iniciar.
   </p>
 
@@ -181,7 +182,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
 
   <div id="loadingOverlay">
    <div class="spinner"></div>
-   <p style="font-size:.8rem;color:#00d26a">Cargando entorno 3D (terapia.1.fbx)...</p>
+   <p style="font-size:.8rem;color:#4589ff">Cargando entorno 3D (terapia.1.fbx)...</p>
    <p id="avatarLoadMessage" style="font-size:.7rem;color:#aaa;margin-top:8px">Preparando avatar...</p>
   </div>
 
@@ -305,10 +306,10 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
    </div>
 
    <div class="card">
-    <h3>Mis terapias <span id="terapiasResumen" style="color:#a0a0c0;font-weight:normal;text-transform:none;"></span></h3>
-    <div style="font-size:.65rem;color:#a0a0c0;margin-bottom:3px">
-     Del <strong id="dispInicio" style="color:#00d26a">-</strong>
-     al <strong id="dispFin" style="color:#00d26a">-</strong>
+    <h3>Mis terapias <span id="terapiasResumen" style="color:#94a3b8;font-weight:normal;text-transform:none;"></span></h3>
+    <div style="font-size:.65rem;color:#94a3b8;margin-bottom:3px">
+     Del <strong id="dispInicio" style="color:#4589ff">-</strong>
+     al <strong id="dispFin" style="color:#4589ff">-</strong>
     </div>
     <div class="days-list" id="daysSequenceContainer"></div>
    </div>
@@ -320,7 +321,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
      <div><div class="info-label">Codo</div><div class="info-value" id="angleElbow">--</div></div>
      <div><div class="info-label">Cadera</div><div class="info-value" id="angleHip">--</div></div>
     </div>
-    <div style="font-size:.65rem;color:#a0a0c0;margin-top:5px" id="poseFeedback">
+    <div style="font-size:.65rem;color:#94a3b8;margin-top:5px" id="poseFeedback">
      Colócate frente a la cámara y procura que tu cuerpo esté visible.
     </div>
    </div>
@@ -330,7 +331,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
     <div class="ai-speech-text" id="speechText">Inicia sesión para comenzar.</div>
    </div>
 
-   <div id="vozEstado" style="font-size:.65rem;color:#a0a0c0;margin:4px 0 8px;"></div>
+   <div id="vozEstado" style="font-size:.65rem;color:#94a3b8;margin:4px 0 8px;"></div>
 
    <div class="action-row">
     <button type="button" class="action-btn sos-btn" onclick="simularAlertaClinica()">🚨 Ayuda Médica (SOS)</button>
@@ -341,7 +342,7 @@ body.espejo .action-row,body.espejo .btn-manual-start,body.espejo .movement-swit
  </div>
 </div>
 
-<div id="avisoMedico" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#0f3d24;border:1px solid #00d26a;color:#fff;padding:10px 18px;border-radius:8px;z-index:9998;font-family:Arial,sans-serif;font-size:.9rem;box-shadow:0 4px 15px rgba(0,0,0,.5);max-width:90%;text-align:center;">👨‍⚕️ <span id="avisoMedicoTexto">El médico se ha conectado a tu sesión.</span></div>
+<div id="avisoMedico" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#0f3d24;border:1px solid #4589ff;color:#fff;padding:10px 18px;border-radius:8px;z-index:9998;font-family:Arial,sans-serif;font-size:.9rem;box-shadow:0 4px 15px rgba(0,0,0,.5);max-width:90%;text-align:center;">👨‍⚕️ <span id="avisoMedicoTexto">El médico se ha conectado a tu sesión.</span></div>
 
 <script>
 /* =========================================================

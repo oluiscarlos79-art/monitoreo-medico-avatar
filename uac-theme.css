@@ -1,0 +1,48 @@
+/* UAC Tele-Rehabilitación — tema clínico compartido por index.html, medico.html y datos-crudos.html */
+:root {
+  --primary: #4589ff;
+  --primary-hover: #78a9ff;
+  --primary-light: #162238;
+  --secondary: #08bdba;
+  --secondary-light: #112a30;
+  --bg-page: #0b111e;
+  --bg-card: #131c2e;
+  --bg-subtle: #1a253b;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-light: #64748b;
+  --border: #27354f;
+  --border-strong: #36496b;
+  --success: #42be65;
+  --success-bg: #102a1c;
+  --warning: #f1c21b;
+  --warning-bg: #2e250b;
+  --danger: #ff8389;
+  --danger-bg: #331418;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --font-ui: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Consolas', 'SFMono-Regular', Menlo, monospace;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-hover);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-page); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-light); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

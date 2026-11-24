@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Datos entrantes en bruto — UAC Tele-Rehabilitación</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="/uac-theme.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-ui); background: var(--bg-page); color: var(--text-main); min-height: 100vh; padding: 24px; line-height: 1.5; }
+    .wrap { max-width: 1400px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 1.25rem; color: var(--primary); }
+    .sub { color: var(--text-muted); font-size: 0.86rem; margin-top: 2px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; background: var(--primary-light); color: var(--primary); border: 1px solid #2c4a7c; }
+    .badge.vivo { background: var(--success-bg); color: var(--success); border-color: var(--success); }
+    .badge.error { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+    button { background: var(--primary); color: #fff; border: 1px solid transparent; padding: 9px 16px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; font-family: inherit; }
+    button:hover { background: var(--primary-hover); }
+    .btn-call { background: var(--success-bg); color: var(--success); border-color: var(--success); }
+    .btn-call:hover { background: #163b27; }
+    .btn-secondary { background: #23304a; color: #e2e8f0; border-color: var(--border-strong); }
+    .btn-secondary:hover { background: #2d3d5e; }
+    label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 0.84rem; color: var(--text-muted); cursor: pointer; }
+    .resumen { margin-left: auto; font-size: 0.84rem; color: var(--text-muted); }
+    .tabla-wrap { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: auto; max-height: calc(100vh - 210px); background: var(--bg-card); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { position: sticky; top: 0; background: #1e293b; color: #cbd5e1; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+    tbody tr:hover { background: #1d2942; }
+    tbody tr.nueva { animation: resaltar 2.4s ease-out; }
+    @keyframes resaltar { from { background: rgba(69, 137, 255, 0.28); } to { background: transparent; } }
+    td.vacio { text-align: center; color: var(--text-muted); padding: 28px; white-space: normal; }
+    #aviso { display: none; max-width: 560px; margin: 12vh auto; padding: 28px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); text-align: center; }
+    #aviso p { color: var(--text-muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="aviso">
+    <h1>Sesión no disponible</h1>
+    <p id="avisoTexto">Inicia sesión en el portal médico y vuelve a abrir esta ventana desde el historial clínico.</p>
+  </div>
+
+  <div class="wrap" id="contenido" style="display:none;">
+    <header>
+      <div>
+        <span class="badge" id="estadoConexion">CONECTANDO...</span>
+        <h1 id="titulo" style="margin-top:8px;">Datos entrantes en bruto</h1>
+        <p class="sub">Telemetría y sensores recibidos del equipo del paciente. Más recientes primero.</p>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <button class="btn-call" onclick="exportarCsv()">📊 Exportar a Excel (CSV)</button>
+      <button class="btn-secondary" onclick="recargar()">↻ Recargar historial</button>
+      <label class="chk"><input type="checkbox" id="chkPausa"> Pausar actualización en pantalla</label>
+      <span class="resumen" id="resumen"></span>
+    </div>
+
+    <div class="tabla-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha y hora</th><th>FC (lpm)</th><th>FR (rpm)</th><th>SpO₂ (%)</th><th>Temp (°C)</th>
+            <th>Hombro</th><th>Codo</th><th>Cadera</th><th>Estado</th><th>Día</th><th>Rep.</th><th>Origen</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <button id="btnMas" class="btn-secondary" style="margin-top:12px; display:none;" onclick="visibles += 200; pintar();">Mostrar más registros</button>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const cedula = String(params.get('cedula') || '').trim();
+    const nombre = params.get('nombre') || '';
+    const token = sessionStorage.getItem('uac_token_medico') || '';
+    const ETIQUETAS_ESTADO = {
+      ESPERANDO: 'En espera', PREPARANDO: 'Preparando', TERAPIA: 'En curso', PAUSADA: 'En pausa',
+      REPOSO: 'Finalizada', ALERTA_MEDICA: 'SOS activo', CERRADA: 'Sesión cerrada'
+    };
+
+    let vitales = [];
+    let visibles = 200;
+    let socket = null;
+    let pendientePintar = false;
+    let nuevosDesdePintado = 0;
+
+    function avisar(texto) {
+      document.getElementById('avisoTexto').innerText = texto;
+      document.getElementById('aviso').style.display = 'block';
+      document.getElementById('contenido').style.display = 'none';
+    }
+
+    function estado(texto, clase) {
+      const e = document.getElementById('estadoConexion');
+      e.innerText = texto;
+      e.className = 'badge' + (clase ? ' ' + clase : '');
+    }
+
+    const fmt = (n, d) => (n === null || n === undefined) ? '—' : Number(n).toFixed(d);
+
+    function celda(tr, texto) {
+      const td = document.createElement('td');
+      td.textContent = texto;
+      tr.appendChild(td);
+      return td;
+    }
+
+    function pintar() {
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      const arr = vitales.slice().reverse();
+
+      if (!arr.length) {
+        const tr = document.createElement('tr');
+        const td = celda(tr, 'Aún no hay lecturas registradas. Se guardan solas cuando el paciente está conectado y el sensor envía datos.');
+        td.colSpan = 12;
+        td.className = 'vacio';
+        tbody.appendChild(tr);
+      }
+
+      arr.slice(0, visibles).forEach((r, i) => {
+        const tr = document.createElement('tr');
+        if (i < nuevosDesdePintado) tr.className = 'nueva';
+        celda(tr, new Date(r.t).toLocaleString('es-CO'));
+        celda(tr, fmt(r.pulso, 0));
+        celda(tr, fmt(r.respiracion, 0));
+        celda(tr, fmt(r.saturacion, 0));
+        celda(tr, fmt(r.temperatura, 1));
+        celda(tr, fmt(r.hombro, 0));
+        celda(tr, fmt(r.codo, 0));
+        celda(tr, fmt(r.cadera, 0));
+        celda(tr, ETIQUETAS_ESTADO[r.estado] || r.estado || '—');
+        celda(tr, r.dia != null ? r.dia : '—');
+        celda(tr, r.repeticiones != null ? r.repeticiones : '—');
+        celda(tr, r.origen === 'terapia' ? 'Durante terapia' : 'Sensor');
+        tbody.appendChild(tr);
+      });
+
+      nuevosDesdePintado = 0;
+      document.getElementById('btnMas').style.display = arr.length > visibles ? 'inline-flex' : 'none';
+      document.getElementById('resumen').innerText = vitales.length
+        ? vitales.length + ' lecturas · última: ' + new Date(vitales[vitales.length - 1].t).toLocaleString('es-CO')
+        : '0 lecturas';
+    }
+
+    function programarPintado() {
+      if (document.getElementById('chkPausa').checked || pendientePintar) return;
+      pendientePintar = true;
+      setTimeout(() => { pendientePintar = false; pintar(); }, 500);
+    }
+
+    async function recargar() {
+      try {
+        const r = await fetch('/api/pacientes/' + encodeURIComponent(cedula) + '/historial', {
+          headers: { Authorization: 'Bearer ' + token },
+          cache: 'no-store'
+        });
+        if (r.status === 401) { avisar('La sesión del médico venció. Inicia sesión de nuevo en el portal y vuelve a abrir esta ventana.'); return; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        vitales = Array.isArray(j.vitales) ? j.vitales : [];
+        pintar();
+      } catch (e) {
+        console.error(e);
+        estado('ERROR AL CARGAR', 'error');
+      }
+    }
+
+    function exportarCsv() {
+      if (!vitales.length) { alert('No hay lecturas para exportar.'); return; }
+      const esc = (v) => '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"';
+      const filas = [['Fecha', 'Hora', 'FC (lpm)', 'FR (rpm)', 'SpO2 (%)', 'Temp (C)', 'Hombro', 'Codo', 'Cadera', 'Estado', 'Dia', 'Repeticiones', 'Origen']];
+      vitales.forEach((r) => {
+        const d = new Date(r.t);
+        filas.push([d.toLocaleDateString('es-CO'), d.toLocaleTimeString('es-CO'), r.pulso, r.respiracion, r.saturacion, r.temperatura, r.hombro, r.codo, r.cadera, r.estado, r.dia, r.repeticiones, r.origen]);
+      });
+      const csv = '\ufeff' + filas.map((f) => f.map(esc).join(';')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = 'signos_vitales_' + cedula + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    function conectar() {
+      socket = io({ auth: { token: token } });
+      socket.on('connect', () => { estado('EN VIVO', 'vivo'); socket.emit('doctor:join'); });
+      socket.on('disconnect', () => estado('SIN CONEXIÓN', 'error'));
+      socket.on('connect_error', () => estado('SIN CONEXIÓN', 'error'));
+      socket.on('server:auth-error', () => avisar('La sesión del médico venció. Inicia sesión de nuevo en el portal y vuelve a abrir esta ventana.'));
+      socket.on('patient:vitals', (r) => {
+        if (!r || String(r.cedula) !== cedula) return;
+        vitales.push(r);
+        nuevosDesdePintado++;
+        programarPintado();
+      });
+    }
+
+    (function iniciar() {
+      if (!cedula) { avisar('Falta la cédula del paciente. Abre esta ventana desde el historial clínico.'); return; }
+      if (!token) { avisar('No hay una sesión de médico activa. Inicia sesión en el portal médico y vuelve a abrir esta ventana desde el historial clínico.'); return; }
+      document.getElementById('contenido').style.display = 'block';
+      document.getElementById('titulo').innerText = 'Datos entrantes en bruto' + (nombre ? ' — ' + nombre : '') + ' (' + cedula + ')';
+      document.title = 'Datos en bruto — ' + (nombre || cedula);
+      document.getElementById('chkPausa').addEventListener('change', (e) => { if (!e.target.checked) pintar(); });
+      recargar();
+      conectar();
+    })();
+  </script>
+</body>
+</html>
